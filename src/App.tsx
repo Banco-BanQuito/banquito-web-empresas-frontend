@@ -1,17 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
+  ArrowUpRight,
+  Banknote,
+  Building2,
   CheckCircle2,
   Clock3,
   Download,
   FileCheck2,
   FileText,
+  Gauge,
+  Landmark,
+  LayoutDashboard,
   Loader2,
+  LockKeyhole,
   RefreshCw,
   Search,
   Send,
+  ShieldCheck,
   Trash2,
   UploadCloud,
+  WalletCards,
   XCircle
 } from "lucide-react";
 import { downloadBatchReport, getBatchStatus, getReceipt, saveBlob, uploadPaymentBatch } from "./api";
@@ -20,8 +29,17 @@ import { clearHistory, readHistory, updateHistoryStatus, upsertHistory } from ".
 import type { BatchHistoryItem, BatchStatus, BatchStatusName, Receipt, UploadResponse } from "./types";
 
 const terminalStatuses: BatchStatusName[] = ["COMPLETED", "FAILED", "REJECTED"];
+type AppView = "overview" | "payments" | "reports" | "security";
+
+const viewMeta: Record<AppView, { eyebrow: string; title: string }> = {
+  overview: { eyebrow: "Banca empresarial", title: "Centro de control corporativo" },
+  payments: { eyebrow: "Pagos masivos", title: "Carga y seguimiento de lotes" },
+  reports: { eyebrow: "Reporteria", title: "Novedades y comprobantes" },
+  security: { eyebrow: "Integraciones", title: "Conectividad con microservicios" }
+};
 
 export function App() {
+  const [activeView, setActiveView] = useState<AppView>("overview");
   const [history, setHistory] = useState<BatchHistoryItem[]>(() => readHistory());
   const [selectedBatchId, setSelectedBatchId] = useState("");
   const [status, setStatus] = useState<BatchStatus | null>(null);
@@ -37,8 +55,10 @@ export function App() {
     [history, selectedBatchId]
   );
 
+  const dashboardStats = useMemo(() => buildDashboardStats(history, status), [history, status]);
+
   useEffect(() => {
-    if (!selectedBatchId || !autoRefresh || status?.status === "COMPLETED" || status?.status === "FAILED" || status?.status === "REJECTED") {
+    if (!selectedBatchId || !autoRefresh || terminalStatuses.includes(status?.status || "UNKNOWN")) {
       return;
     }
     const interval = window.setInterval(() => {
@@ -143,58 +163,127 @@ export function App() {
   const canDownload = status?.status === "COMPLETED";
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">BanQuito Switch</p>
-          <h1>Empresas</h1>
-        </div>
-        <div className="connection-pill">
-          <span>Kong Switch</span>
-          <strong>{config.apiBaseUrl}</strong>
-        </div>
-      </header>
+    <main className="bank-shell">
+      <Sidebar activeView={activeView} onNavigate={setActiveView} />
+      <section className="bank-main">
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">{viewMeta[activeView].eyebrow}</p>
+            <h1>{viewMeta[activeView].title}</h1>
+          </div>
+          <div className="topbar-actions">
+            <div className="connection-pill">
+              <span>Switch operativo</span>
+              <strong>{compactUrl(config.apiBaseUrl)}</strong>
+            </div>
+            <button type="button" className="icon-only quiet" aria-label="Seguridad">
+              <LockKeyhole size={19} />
+            </button>
+          </div>
+        </header>
 
-      {notice && <Notice notice={notice} onClose={() => setNotice(null)} />}
+        {notice && <Notice notice={notice} onClose={() => setNotice(null)} />}
 
-      <section className="workspace">
-        <div className="primary-column">
-          <UploadPanel onUploaded={handleUploaded} onNotice={setNotice} />
-          <StatusPanel
-            batchId={selectedBatchId}
-            setBatchId={setSelectedBatchId}
-            status={status}
-            selectedHistory={selectedHistory}
-            loading={loadingStatus}
-            autoRefresh={autoRefresh}
-            setAutoRefresh={setAutoRefresh}
-            onRefresh={() => void refreshStatus()}
-          />
-          <ReportsPanel
-            canDownload={canDownload}
-            status={status}
-            receipt={receipt}
-            downloadingReport={downloadingReport}
-            loadingReceipt={loadingReceipt}
-            onDownloadReport={() => void handleDownloadReport()}
-            onReceipt={() => void handleReceipt()}
-          />
-        </div>
-        <HistoryPanel
-          history={history}
-          selectedBatchId={selectedBatchId}
-          onSelect={(batchId) => {
-            setSelectedBatchId(batchId);
-            setReceipt(null);
-            void refreshStatus(batchId);
-          }}
-          onClear={() => {
-            setHistory(clearHistory());
-            setStatus(null);
-            setReceipt(null);
-            setSelectedBatchId("");
-          }}
-        />
+        {activeView === "overview" && (
+          <>
+            <DashboardStrip stats={dashboardStats} />
+            <section className="overview-grid">
+              <OperationsPanel onNavigate={setActiveView} />
+              <HistoryPanel
+                history={history}
+                selectedBatchId={selectedBatchId}
+                onSelect={(batchId) => {
+                  setSelectedBatchId(batchId);
+                  setReceipt(null);
+                  setActiveView("payments");
+                  void refreshStatus(batchId);
+                }}
+                onClear={() => {
+                  setHistory(clearHistory());
+                  setStatus(null);
+                  setReceipt(null);
+                  setSelectedBatchId("");
+                }}
+              />
+            </section>
+          </>
+        )}
+
+        {activeView === "payments" && (
+          <section className="workspace">
+            <div className="primary-column">
+              <UploadPanel onUploaded={handleUploaded} onNotice={setNotice} />
+              <StatusPanel
+                batchId={selectedBatchId}
+                setBatchId={setSelectedBatchId}
+                status={status}
+                selectedHistory={selectedHistory}
+                loading={loadingStatus}
+                autoRefresh={autoRefresh}
+                setAutoRefresh={setAutoRefresh}
+                onRefresh={() => void refreshStatus()}
+              />
+            </div>
+            <HistoryPanel
+              history={history}
+              selectedBatchId={selectedBatchId}
+              onSelect={(batchId) => {
+                setSelectedBatchId(batchId);
+                setReceipt(null);
+                void refreshStatus(batchId);
+              }}
+              onClear={() => {
+                setHistory(clearHistory());
+                setStatus(null);
+                setReceipt(null);
+                setSelectedBatchId("");
+              }}
+            />
+          </section>
+        )}
+
+        {activeView === "reports" && (
+          <section className="workspace reports-workspace">
+            <div className="primary-column">
+              <StatusPanel
+                batchId={selectedBatchId}
+                setBatchId={setSelectedBatchId}
+                status={status}
+                selectedHistory={selectedHistory}
+                loading={loadingStatus}
+                autoRefresh={autoRefresh}
+                setAutoRefresh={setAutoRefresh}
+                onRefresh={() => void refreshStatus()}
+              />
+              <ReportsPanel
+                canDownload={canDownload}
+                status={status}
+                receipt={receipt}
+                downloadingReport={downloadingReport}
+                loadingReceipt={loadingReceipt}
+                onDownloadReport={() => void handleDownloadReport()}
+                onReceipt={() => void handleReceipt()}
+              />
+            </div>
+            <HistoryPanel
+              history={history}
+              selectedBatchId={selectedBatchId}
+              onSelect={(batchId) => {
+                setSelectedBatchId(batchId);
+                setReceipt(null);
+                void refreshStatus(batchId);
+              }}
+              onClear={() => {
+                setHistory(clearHistory());
+                setStatus(null);
+                setReceipt(null);
+                setSelectedBatchId("");
+              }}
+            />
+          </section>
+        )}
+
+        {activeView === "security" && <IntegrationPanel />}
       </section>
     </main>
   );
@@ -209,6 +298,156 @@ interface UploadMeta {
 interface UiNotice {
   type: "success" | "error" | "info";
   message: string;
+}
+
+function Sidebar({ activeView, onNavigate }: { activeView: AppView; onNavigate: (view: AppView) => void }) {
+  const items = [
+    { label: "Resumen", icon: LayoutDashboard, view: "overview" },
+    { label: "Pagos masivos", icon: WalletCards, view: "payments" },
+    { label: "Reportes", icon: FileText, view: "reports" },
+    { label: "Seguridad", icon: ShieldCheck, view: "security" }
+  ] as const;
+
+  return (
+    <aside className="sidebar">
+      <div className="brand-lockup">
+        <div className="brand-mark">
+          <Landmark size={24} />
+        </div>
+        <div>
+          <strong>BanQuito</strong>
+          <span>Corporate Banking</span>
+        </div>
+      </div>
+      <nav className="side-nav" aria-label="Menu principal">
+        {items.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button type="button" className={activeView === item.view ? "active" : ""} key={item.label} onClick={() => onNavigate(item.view)}>
+              <Icon size={18} />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+      <div className="sidebar-foot">
+        <ShieldCheck size={18} />
+        <span>Sesion empresarial protegida</span>
+      </div>
+    </aside>
+  );
+}
+
+function DashboardStrip({ stats }: { stats: ReturnType<typeof buildDashboardStats> }) {
+  return (
+    <section className="executive-strip" aria-label="Resumen ejecutivo">
+      <div className="executive-card primary">
+        <div className="executive-copy">
+          <span>Cuenta corporativa</span>
+          <strong>BanQuito Empresas</strong>
+          <small>Pagos, reportes y comprobantes en una sola consola.</small>
+        </div>
+        <div className="executive-amount">{moneyText(stats.amount)}</div>
+      </div>
+      <StatCard icon={FileCheck2} label="Lotes registrados" value={numberText(stats.batches)} />
+      <StatCard icon={CheckCircle2} label="Procesados" value={numberText(stats.completed)} tone="good" />
+      <StatCard icon={Gauge} label="En seguimiento" value={numberText(stats.inFlight)} />
+    </section>
+  );
+}
+
+function OperationsPanel({ onNavigate }: { onNavigate: (view: AppView) => void }) {
+  return (
+    <section className="panel operations-panel">
+      <div className="panel-title">
+        <span className="title-icon">
+          <Building2 size={20} />
+        </span>
+        <div>
+          <h2>Operaciones disponibles</h2>
+          <p>Flujo listo para consumir Kong Switch y los microservicios conectados.</p>
+        </div>
+      </div>
+      <div className="operation-list">
+        <button type="button" onClick={() => onNavigate("payments")}>
+          <WalletCards size={20} />
+          <span>
+            <strong>Cargar pagos masivos</strong>
+            <small>Envio a file-reception por Kong Switch.</small>
+          </span>
+          <ArrowUpRight size={18} />
+        </button>
+        <button type="button" onClick={() => onNavigate("payments")}>
+          <Clock3 size={20} />
+          <span>
+            <strong>Consultar lote</strong>
+            <small>Seguimiento de estado desde routing-service.</small>
+          </span>
+          <ArrowUpRight size={18} />
+        </button>
+        <button type="button" onClick={() => onNavigate("reports")}>
+          <FileCheck2 size={20} />
+          <span>
+            <strong>Descargar novedades</strong>
+            <small>Reportes y comprobantes desde report-service.</small>
+          </span>
+          <ArrowUpRight size={18} />
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function IntegrationPanel() {
+  const endpoints = [
+    { owner: "Alan", service: "file-reception-service", method: "POST", path: config.uploadPath },
+    { owner: "Paul", service: "routing-service", method: "GET", path: config.batchStatusPath },
+    { owner: "Anthony", service: "report-service", method: "GET", path: config.batchReportPath },
+    { owner: "Anthony", service: "report-service", method: "GET", path: config.receiptPath }
+  ];
+
+  return (
+    <section className="integration-grid">
+      <div className="panel integration-card">
+        <div className="panel-title">
+          <span className="title-icon">
+            <ShieldCheck size={20} />
+          </span>
+          <div>
+            <h2>Conexion por defecto</h2>
+            <p>El front consume el Switch por Kong y no llama directamente a micros ajenos.</p>
+          </div>
+        </div>
+        <div className="connection-large">
+          <span>Gateway activo</span>
+          <strong>{config.apiBaseUrl}</strong>
+        </div>
+      </div>
+      <div className="panel endpoint-panel">
+        <div className="panel-title">
+          <span className="title-icon">
+            <Landmark size={20} />
+          </span>
+          <div>
+            <h2>Rutas consumidas</h2>
+            <p>Contratos usados por el front empresarial.</p>
+          </div>
+        </div>
+        <div className="endpoint-list">
+          {endpoints.map((endpoint) => (
+            <div className="endpoint-row" key={`${endpoint.method}-${endpoint.path}`}>
+              <span className="method">{endpoint.method}</span>
+              <span>
+                <strong>{endpoint.service}</strong>
+                <small>{endpoint.owner}</small>
+              </span>
+              <code>{endpoint.path}</code>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function UploadPanel({
@@ -247,15 +486,26 @@ function UploadPanel({
   }
 
   return (
-    <section className="panel">
+    <section className="panel upload-panel">
       <div className="panel-title">
-        <UploadCloud size={20} />
-        <h2>Cargar lote</h2>
+        <span className="title-icon">
+          <UploadCloud size={20} />
+        </span>
+        <div>
+          <h2>Cargar lote de pagos</h2>
+          <p>Envio seguro al Switch de Pagos Masivos V2.</p>
+        </div>
       </div>
+
       <div className="form-grid">
         <label>
           <span>RUC empresa</span>
-          <input value={clientRuc} onChange={(event) => setClientRuc(onlyDigits(event.target.value).slice(0, 13))} inputMode="numeric" />
+          <input
+            value={clientRuc}
+            onChange={(event) => setClientRuc(onlyDigits(event.target.value).slice(0, 13))}
+            inputMode="numeric"
+            placeholder="1790012345001"
+          />
         </label>
         <label>
           <span>Servicio</span>
@@ -268,24 +518,28 @@ function UploadPanel({
           </select>
         </label>
       </div>
-      <div className="file-row">
-        <button type="button" className="icon-button secondary" onClick={() => inputRef.current?.click()} aria-label="Seleccionar archivo">
-          <FileText size={18} />
-          <span>{file ? file.name : "Seleccionar CSV/TXT"}</span>
-        </button>
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".csv,.txt,text/csv,text/plain"
-          onChange={(event) => setFile(event.target.files?.[0] || null)}
-        />
-        {file && <span className="file-size">{formatBytes(file.size)}</span>}
-      </div>
+
+      <button type="button" className={`dropzone ${file ? "loaded" : ""}`} onClick={() => inputRef.current?.click()}>
+        <span className="dropzone-icon">
+          <FileText size={24} />
+        </span>
+        <span>
+          <strong>{file ? file.name : "Seleccionar archivo CSV/TXT"}</strong>
+          <small>{file ? formatBytes(file.size) : `Maximo ${config.maxUploadMb} MB por lote`}</small>
+        </span>
+        <ArrowUpRight size={19} />
+      </button>
+      <input ref={inputRef} type="file" accept=".csv,.txt,text/csv,text/plain" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+
       <div className="actions">
         <button type="button" className="primary-action" onClick={() => void submit()} disabled={submitting}>
           {submitting ? <Loader2 className="spin" size={18} /> : <Send size={18} />}
-          <span>Procesar nomina</span>
+          <span>Enviar a procesamiento</span>
         </button>
+        <div className="process-note">
+          <ShieldCheck size={16} />
+          <span>Validacion, enrutamiento y trazabilidad por batch.</span>
+        </div>
       </div>
     </section>
   );
@@ -309,39 +563,58 @@ function StatusPanel(props: {
     props.status?.inProcessRecords ??
     props.selectedHistory?.inProcessRecords ??
     inferInProcess(declaredRecords, successfulRecords, rejectedRecords);
+  const progress = completionPercent(declaredRecords, successfulRecords, rejectedRecords);
+
   return (
-    <section className="panel">
-      <div className="panel-title">
-        <Clock3 size={20} />
-        <h2>Seguimiento</h2>
+    <section className="panel status-panel">
+      <div className="panel-title split">
+        <span className="title-icon">
+          <Clock3 size={20} />
+        </span>
+        <div>
+          <h2>Seguimiento del lote</h2>
+          <p>Consulta operativa con actualizacion automatica.</p>
+        </div>
+        <StatusBadge status={displayedStatus} />
       </div>
+
       <div className="lookup-row">
         <label>
           <span>Batch ID</span>
-          <input value={props.batchId} onChange={(event) => props.setBatchId(event.target.value.trim())} />
+          <input value={props.batchId} onChange={(event) => props.setBatchId(event.target.value.trim())} placeholder="Ej. batch-2026-..." />
         </label>
         <button type="button" className="icon-only" onClick={props.onRefresh} disabled={props.loading} aria-label="Consultar estado">
           {props.loading ? <Loader2 className="spin" size={20} /> : <Search size={20} />}
         </button>
       </div>
-      <div className="status-strip">
-        <StatusBadge status={displayedStatus} />
-        <label className="toggle">
+
+      <div className="progress-head">
+        <div>
+          <span>Avance operativo</span>
+          <strong>{Math.round(progress)}%</strong>
+        </div>
+        <label className="switch">
           <input type="checkbox" checked={props.autoRefresh} onChange={(event) => props.setAutoRefresh(event.target.checked)} />
-          <span>Auto</span>
+          <span />
+          Auto
         </label>
-        <button type="button" className="ghost-button" onClick={props.onRefresh} disabled={props.loading}>
-          <RefreshCw size={16} />
-          <span>Actualizar</span>
-        </button>
       </div>
+
       <ProgressBar total={declaredRecords} successful={successfulRecords} rejected={rejectedRecords} inProcess={inProcessRecords} />
+
       <div className="metrics-grid">
         <Metric label="Declaradas" value={numberText(declaredRecords)} />
         <Metric label="Exitosas" value={numberText(successfulRecords)} tone="good" />
         <Metric label="Rechazadas" value={numberText(rejectedRecords)} tone="bad" />
         <Metric label="En proceso" value={numberText(inProcessRecords)} />
-        <Metric label="Monto exitoso" value={moneyText(props.status?.successfulAmount ?? props.selectedHistory?.successfulAmount)} />
+        <Metric label="Monto exitoso" value={moneyText(props.status?.successfulAmount ?? props.selectedHistory?.successfulAmount)} wide />
+      </div>
+
+      <div className="status-actions">
+        <button type="button" className="secondary-action" onClick={props.onRefresh} disabled={props.loading}>
+          <RefreshCw size={16} />
+          <span>Actualizar estado</span>
+        </button>
       </div>
     </section>
   );
@@ -383,10 +656,15 @@ function ReportsPanel(props: {
   onReceipt: () => void;
 }) {
   return (
-    <section className="panel">
+    <section className="panel reports-panel">
       <div className="panel-title">
-        <FileCheck2 size={20} />
-        <h2>Reportes</h2>
+        <span className="title-icon">
+          <FileCheck2 size={20} />
+        </span>
+        <div>
+          <h2>Reportes y comprobantes</h2>
+          <p>Disponible cuando el lote finaliza correctamente.</p>
+        </div>
       </div>
       <div className="download-row">
         <button type="button" className="primary-action" onClick={props.onDownloadReport} disabled={!props.canDownload || props.downloadingReport}>
@@ -398,25 +676,18 @@ function ReportsPanel(props: {
           <span>Comprobante</span>
         </button>
       </div>
-      {props.receipt && (
+      {props.receipt ? (
         <div className="receipt-box">
-          <div>
-            <span>Total debitado</span>
-            <strong>{moneyText(props.receipt.totalDebited)}</strong>
-          </div>
-          <div>
-            <span>Dispersado</span>
-            <strong>{moneyText(props.receipt.totalAmountDispatched)}</strong>
-          </div>
-          <div>
-            <span>Comision</span>
-            <strong>{moneyText(props.receipt.commissionCharged)}</strong>
-          </div>
-          <div>
-            <span>IVA</span>
-            <strong>{moneyText(props.receipt.ivaCharged)}</strong>
-          </div>
+          <Metric label="Total debitado" value={moneyText(props.receipt.totalDebited)} />
+          <Metric label="Dispersado" value={moneyText(props.receipt.totalAmountDispatched)} tone="good" />
+          <Metric label="Comision" value={moneyText(props.receipt.commissionCharged)} />
+          <Metric label="IVA" value={moneyText(props.receipt.ivaCharged)} />
           <small>{props.receipt.receiptUuid}</small>
+        </div>
+      ) : (
+        <div className="empty-card">
+          <Banknote size={22} />
+          <span>{props.status ? "Selecciona una accion cuando el lote este completo." : "Sin lote seleccionado."}</span>
         </div>
       )}
     </section>
@@ -430,9 +701,12 @@ function HistoryPanel(props: {
   onClear: () => void;
 }) {
   return (
-    <aside className="history-panel">
+    <aside className="panel history-panel">
       <div className="history-header">
-        <h2>Historial</h2>
+        <div>
+          <h2>Historial reciente</h2>
+          <p>Ultimas consultas y cargas locales.</p>
+        </div>
         <button type="button" className="icon-only subtle" onClick={props.onClear} aria-label="Limpiar historial" disabled={props.history.length === 0}>
           <Trash2 size={18} />
         </button>
@@ -447,9 +721,8 @@ function HistoryPanel(props: {
             onClick={() => props.onSelect(item.batchId)}
           >
             <span className="history-main">{item.batchId}</span>
-            <span className="history-meta">
-              {item.fileName || item.clientRuc || "Consulta"} - {item.status || "UNKNOWN"}
-            </span>
+            <span className="history-meta">{item.fileName || item.clientRuc || "Consulta"}</span>
+            <StatusBadge status={item.status || "UNKNOWN"} compact />
           </button>
         ))}
       </div>
@@ -470,19 +743,29 @@ function Notice({ notice, onClose }: { notice: UiNotice; onClose: () => void }) 
   );
 }
 
-function StatusBadge({ status }: { status: BatchStatusName }) {
+function StatCard({ icon: Icon, label, value, tone }: { icon: typeof Building2; label: string; value: string; tone?: "good" }) {
+  return (
+    <div className={`stat-card ${tone || ""}`}>
+      <Icon size={20} />
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function StatusBadge({ status, compact }: { status: BatchStatusName; compact?: boolean }) {
   const Icon = status === "COMPLETED" ? CheckCircle2 : status === "FAILED" || status === "REJECTED" ? XCircle : Clock3;
   return (
-    <span className={`status-badge ${status.toLowerCase()}`}>
-      <Icon size={16} />
-      {status}
+    <span className={`status-badge ${compact ? "compact" : ""} ${status.toLowerCase()}`}>
+      <Icon size={compact ? 13 : 16} />
+      {statusLabel(status)}
     </span>
   );
 }
 
-function Metric({ label, value, tone }: { label: string; value: string; tone?: "good" | "bad" }) {
+function Metric({ label, value, tone, wide }: { label: string; value: string; tone?: "good" | "bad"; wide?: boolean }) {
   return (
-    <div className={`metric ${tone || ""}`}>
+    <div className={`metric ${tone || ""} ${wide ? "wide" : ""}`}>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
@@ -515,10 +798,41 @@ function readableError(error: unknown) {
 }
 
 function normalize(status?: string): BatchStatusName {
-  const value = status?.toUpperCase();
+  const value = status?.toUpperCase().trim();
+  if (value === "RECIBIDO" || value === "PENDIENTE") {
+    return "RECEIVED";
+  }
+  if (value === "EN_PROCESO" || value === "PROCESANDO") {
+    return "PROCESSING";
+  }
+  if (value === "COMPLETANDO") {
+    return "COMPLETING";
+  }
+  if (value === "COMPLETADO" || value === "FINALIZADO") {
+    return "COMPLETED";
+  }
+  if (value === "FALLIDO" || value === "ERROR") {
+    return "FAILED";
+  }
+  if (value === "RECHAZADO" || value === "RECHAZADA") {
+    return "REJECTED";
+  }
   return terminalStatuses.includes(value as BatchStatusName) || value === "RECEIVED" || value === "PROCESSING" || value === "COMPLETING"
     ? (value as BatchStatusName)
     : "UNKNOWN";
+}
+
+function buildDashboardStats(history: BatchHistoryItem[], status: BatchStatus | null) {
+  const completed = history.filter((item) => item.status === "COMPLETED").length + (status?.status === "COMPLETED" ? 1 : 0);
+  const inFlight = history.filter((item) => item.status === "RECEIVED" || item.status === "PROCESSING" || item.status === "COMPLETING").length;
+  const amount =
+    history.reduce((sum, item) => sum + (item.successfulAmount || 0), 0) + (status?.successfulAmount && !history.some((item) => item.batchId === status.batchId) ? status.successfulAmount : 0);
+  return {
+    batches: history.length,
+    completed,
+    inFlight,
+    amount
+  };
 }
 
 function onlyDigits(value: string) {
@@ -543,10 +857,17 @@ function percent(value: number | undefined, total: number) {
   return Math.max(0, Math.min(100, (value / total) * 100));
 }
 
+function completionPercent(total?: number, successful?: number, rejected?: number) {
+  if (!total) {
+    return 0;
+  }
+  return percent((successful || 0) + (rejected || 0), total);
+}
+
 function moneyText(value?: number) {
   return typeof value === "number"
     ? new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(value)
-    : "-";
+    : "$0.00";
 }
 
 function formatBytes(bytes: number) {
@@ -557,4 +878,21 @@ function formatBytes(bytes: number) {
     return `${(bytes / 1024).toFixed(1)} KB`;
   }
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function compactUrl(url: string) {
+  return url.replace(/^https?:\/\//, "");
+}
+
+function statusLabel(status: BatchStatusName) {
+  const labels: Record<BatchStatusName, string> = {
+    RECEIVED: "Recibido",
+    PROCESSING: "Procesando",
+    COMPLETING: "Cerrando",
+    COMPLETED: "Completado",
+    FAILED: "Fallido",
+    REJECTED: "Rechazado",
+    UNKNOWN: "Sin estado"
+  };
+  return labels[status];
 }

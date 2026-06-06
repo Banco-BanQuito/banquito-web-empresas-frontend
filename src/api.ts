@@ -154,7 +154,28 @@ function firstNumber(body: unknown, keys: string[]) {
 }
 
 function normalizeStatus(status?: string): BatchStatus["status"] {
-  const value = status?.toUpperCase();
+  const value = status?.toUpperCase().trim();
+  if (!value) {
+    return "UNKNOWN";
+  }
+  if (value === "RECIBIDO" || value === "PENDIENTE") {
+    return "RECEIVED";
+  }
+  if (value === "EN_PROCESO" || value === "PROCESANDO") {
+    return "PROCESSING";
+  }
+  if (value === "COMPLETANDO") {
+    return "COMPLETING";
+  }
+  if (value === "COMPLETADO" || value === "FINALIZADO") {
+    return "COMPLETED";
+  }
+  if (value === "FALLIDO" || value === "ERROR") {
+    return "FAILED";
+  }
+  if (value === "RECHAZADO" || value === "RECHAZADA") {
+    return "REJECTED";
+  }
   if (value === "RECEIVED" || value === "PROCESSING" || value === "COMPLETING" || value === "COMPLETED" || value === "FAILED" || value === "REJECTED") {
     return value;
   }
