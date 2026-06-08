@@ -1,5 +1,5 @@
 export const config = {
-  apiBaseUrl: trimTrailingSlash(import.meta.env.VITE_API_BASE_URL || defaultSwitchUrl()),
+  apiBaseUrl: trimTrailingSlash(import.meta.env.VITE_API_BASE_URL || ""),
   uploadPath: import.meta.env.VITE_UPLOAD_PATH || "/api/v2/payments/batches",
   batchStatusPath: import.meta.env.VITE_BATCH_STATUS_PATH || "/api/v2/payments/batches/:batchId/status",
   batchReportPath: import.meta.env.VITE_BATCH_REPORT_PATH || "/api/v2/payments/batches/:batchId/report",
@@ -21,9 +21,3 @@ function splitCsv(value: string) {
   return values.length ? values : ["NOMINA"];
 }
 
-function defaultSwitchUrl() {
-  if (typeof window === "undefined") {
-    return "http://localhost:8010";
-  }
-  return `${window.location.protocol}//${window.location.hostname}:8010`;
-}
