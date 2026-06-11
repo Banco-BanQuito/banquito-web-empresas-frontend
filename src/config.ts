@@ -1,4 +1,5 @@
 export const config = {
+  partyApiBaseUrl: trimTrailingSlash(import.meta.env.VITE_PARTY_API_BASE_URL || "http://localhost:8083"),
   apiBaseUrl: trimTrailingSlash(import.meta.env.VITE_API_BASE_URL || ""),
   uploadPath: import.meta.env.VITE_UPLOAD_PATH || "/api/v2/payments/batches",
   batchStatusPath: import.meta.env.VITE_BATCH_STATUS_PATH || "/api/v2/payments/batches/:batchId/status",

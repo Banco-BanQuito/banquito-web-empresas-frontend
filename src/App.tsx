@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowUpRight,
@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   Loader2,
   LockKeyhole,
+  LogOut,
   RefreshCw,
   Search,
   Send,
@@ -24,6 +25,7 @@ import {
   XCircle
 } from "lucide-react";
 import { downloadBatchReport, getBatchStatus, getReceipt, saveBlob, uploadPaymentBatch } from "./api";
+import { clearSession, EmpresaSession, loadSession, loginEmpresa, saveSession } from "./auth";
 import { config } from "./config";
 import { clearHistory, readHistory, updateHistoryStatus, upsertHistory } from "./storage";
 import type { BatchHistoryItem, BatchStatus, BatchStatusName, Receipt, UploadResponse } from "./types";
@@ -39,6 +41,26 @@ const viewMeta: Record<AppView, { eyebrow: string; title: string }> = {
 };
 
 export function App() {
+  const [session, setSession] = useState<EmpresaSession | null>(() => loadSession());
+
+  function handleLogin(s: EmpresaSession) {
+    saveSession(s);
+    setSession(s);
+  }
+
+  function handleLogout() {
+    clearSession();
+    setSession(null);
+  }
+
+  if (!session) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
+
+  return <Dashboard session={session} onLogout={handleLogout} />;
+}
+
+function Dashboard({ session, onLogout }: { session: EmpresaSession; onLogout: () => void }) {
   const [activeView, setActiveView] = useState<AppView>("overview");
   const [history, setHistory] = useState<BatchHistoryItem[]>(() => readHistory());
   const [selectedBatchId, setSelectedBatchId] = useState("");
@@ -164,7 +186,7 @@ export function App() {
 
   return (
     <main className="bank-shell">
-      <Sidebar activeView={activeView} onNavigate={setActiveView} />
+      <Sidebar activeView={activeView} onNavigate={setActiveView} session={session} onLogout={onLogout} />
       <section className="bank-main">
         <header className="topbar">
           <div>
@@ -300,7 +322,17 @@ interface UiNotice {
   message: string;
 }
 
-function Sidebar({ activeView, onNavigate }: { activeView: AppView; onNavigate: (view: AppView) => void }) {
+function Sidebar({
+  activeView,
+  onNavigate,
+  session,
+  onLogout,
+}: {
+  activeView: AppView;
+  onNavigate: (view: AppView) => void;
+  session: EmpresaSession;
+  onLogout: () => void;
+}) {
   const items = [
     { label: "Resumen", icon: LayoutDashboard, view: "overview" },
     { label: "Pagos masivos", icon: WalletCards, view: "payments" },
@@ -330,10 +362,14 @@ function Sidebar({ activeView, onNavigate }: { activeView: AppView; onNavigate: 
           );
         })}
       </nav>
-      <div className="sidebar-foot">
-        <ShieldCheck size={18} />
-        <span>Sesion empresarial protegida</span>
+      <div className="sidebar-user">
+        <Building2 size={16} />
+        <span>{session.fullName}</span>
       </div>
+      <button type="button" className="sidebar-logout" onClick={onLogout}>
+        <LogOut size={16} />
+        <span>Cerrar sesión</span>
+      </button>
     </aside>
   );
 }
@@ -739,6 +775,94 @@ function Notice({ notice, onClose }: { notice: UiNotice; onClose: () => void }) 
       <button type="button" onClick={onClose} aria-label="Cerrar aviso">
         <XCircle size={18} />
       </button>
+    </div>
+  );
+}
+
+function LoginPage({ onLogin }: { onLogin: (session: EmpresaSession) => void }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    if (!username.trim() || !password) return;
+    setLoading(true);
+    try {
+      const session = await loginEmpresa(username.trim(), password);
+      onLogin(session);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al conectar. Verifique que el servicio esté disponible.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="login-shell">
+      <aside className="login-brand">
+        <div className="login-brand-inner">
+          <div className="login-logo">
+            <Landmark size={36} />
+          </div>
+          <h1>BanQuito</h1>
+          <p>Portal Empresarial</p>
+          <ul className="login-features">
+            <li><CheckCircle2 size={15} /> Pagos masivos y nómina</li>
+            <li><CheckCircle2 size={15} /> Seguimiento de lotes en tiempo real</li>
+            <li><CheckCircle2 size={15} /> Reportes y comprobantes</li>
+          </ul>
+        </div>
+      </aside>
+
+      <main className="login-form-area">
+        <div className="login-card">
+          <div className="login-header">
+            <h2>Ingreso empresarial</h2>
+            <p>Accede con las credenciales de tu empresa</p>
+          </div>
+
+          {error && (
+            <div className="login-error">
+              <AlertCircle size={16} />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="login-fields">
+            <label>
+              <span>Usuario (RUC / identificación)</span>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Ej. 0000009001001"
+                disabled={loading}
+                required
+                autoFocus
+              />
+            </label>
+            <label>
+              <span>Contraseña</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                disabled={loading}
+                required
+              />
+            </label>
+            <button type="submit" className="login-submit" disabled={loading || !username.trim() || !password}>
+              {loading ? <><Loader2 size={17} className="spin" /> Ingresando...</> : "Ingresar"}
+            </button>
+          </form>
+
+          <p className="login-help">¿Problemas de acceso? Contacte al administrador del sistema.</p>
+        </div>
+      </main>
     </div>
   );
 }
