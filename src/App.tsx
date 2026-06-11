@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowUpRight,
@@ -785,7 +785,7 @@ function LoginPage({ onLogin }: { onLogin: (session: EmpresaSession) => void }) 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
     if (!username.trim() || !password) return;
