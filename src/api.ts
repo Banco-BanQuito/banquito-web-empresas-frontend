@@ -50,6 +50,19 @@ export async function getBatchStatus(batchId: string, signal?: AbortSignal): Pro
   const response = await fetch(url(config.batchStatusPath, batchId), { signal });
   const body = await parseJson(response);
   if (!response.ok) {
+    if (response.status === 404) {
+      return {
+        batchId,
+        status: "PROCESSING",
+        declaredTotalRecords: 0,
+        successfulRecords: 0,
+        rejectedRecords: 0,
+        inProcessRecords: 0,
+        successfulAmount: 0,
+        rejectedAmount: 0,
+        message: "Inicializando procesamiento..."
+      };
+    }
     throw toApiError(response, body, "No se encontro el lote.");
   }
 
@@ -86,6 +99,14 @@ export async function getReceipt(batchId: string): Promise<Receipt> {
   return body as Receipt;
 }
 
+export async function downloadReceiptPdf(batchId: string) {
+  const response = await fetch(url(config.receiptPath, batchId) + "/pdf");
+  if (!response.ok) {
+    throw toApiError(response, await parseJson(response), "No se pudo descargar el PDF.");
+  }
+  return response.blob();
+}
+
 export function saveBlob(blob: Blob, filename: string) {
   const href = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -93,8 +114,10 @@ export function saveBlob(blob: Blob, filename: string) {
   link.download = filename;
   document.body.appendChild(link);
   link.click();
-  link.remove();
-  URL.revokeObjectURL(href);
+  setTimeout(() => {
+    link.remove();
+    URL.revokeObjectURL(href);
+  }, 500);
 }
 
 function url(path: string, batchId?: string) {
@@ -115,7 +138,7 @@ async function parseJson(response: Response) {
 }
 
 function toApiError(response: Response, body: unknown, fallback: string) {
-  const message = typeof body === "object" && body && "message" in body ? String((body as { message: unknown }).message) : fallback;
+  const message = typeof body === "object" && body ? ("message" in body ? String((body as any).message) : "error" in body ? String((body as any).error) : fallback) : fallback;
   return new ApiError(message, response.status, body);
 }
 
@@ -170,14 +193,36 @@ function normalizeStatus(status?: string): BatchStatus["status"] {
   if (value === "COMPLETADO" || value === "FINALIZADO") {
     return "COMPLETED";
   }
+  if (value === "COMPLETED_WITH_ISSUES" || value === "COMPLETED_WITH_NOVEDADES" || value === "EXITOSO_CON_NOVEDAD") {
+    return "COMPLETED_WITH_ISSUES";
+  }
   if (value === "FALLIDO" || value === "ERROR") {
     return "FAILED";
   }
   if (value === "RECHAZADO" || value === "RECHAZADA") {
     return "REJECTED";
   }
-  if (value === "RECEIVED" || value === "PROCESSING" || value === "COMPLETING" || value === "COMPLETED" || value === "FAILED" || value === "REJECTED") {
-    return value;
+  if (value === "RECEIVED" || value === "PROCESSING" || value === "COMPLETING" || value === "COMPLETED" || value === "COMPLETED_WITH_ISSUES" || value === "FAILED" || value === "REJECTED") {
+    return value as BatchStatus["status"];
   }
   return "UNKNOWN";
+}
+
+export interface Account {
+  accountId: number;
+  accountNumber: string;
+  customerId: number;
+  status: string;
+  availableBalance: number;
+  accountingBalance: number;
+  currency: string;
+  branchId: number;
+}
+
+export async function getAccounts(customerId: number, signal?: AbortSignal): Promise<Account[]> {
+  const response = await fetch(`/api/v2/accounts/customer/${customerId}`, { signal });
+  if (!response.ok) {
+    throw new Error("No se pudieron cargar las cuentas");
+  }
+  return await response.json();
 }

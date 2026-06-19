@@ -56,3 +56,24 @@ export async function loginEmpresa(username: string, password: string): Promise<
     mustChangePassword: body.mustChangePassword ?? false,
   };
 }
+
+export async function changePasswordEmpresa(
+  username: string,
+  currentPassword: string,
+  newPassword: string
+): Promise<void> {
+  const response = await fetch(`${config.partyApiBaseUrl}/api/v2/auth/change-password`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, currentPassword, newPassword }),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    const message =
+      typeof body === "object" && body && "message" in body
+        ? String((body as { message: unknown }).message)
+        : "No se pudo cambiar la contraseña.";
+    throw new Error(message);
+  }
+}

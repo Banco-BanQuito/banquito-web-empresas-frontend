@@ -3,6 +3,7 @@ export type BatchStatusName =
   | "PROCESSING"
   | "COMPLETING"
   | "COMPLETED"
+  | "COMPLETED_WITH_ISSUES"
   | "FAILED"
   | "REJECTED"
   | "UNKNOWN";

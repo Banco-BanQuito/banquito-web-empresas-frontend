@@ -24,20 +24,20 @@ import {
   WalletCards,
   XCircle
 } from "lucide-react";
-import { downloadBatchReport, getBatchStatus, getReceipt, saveBlob, uploadPaymentBatch } from "./api";
-import { clearSession, EmpresaSession, loadSession, loginEmpresa, saveSession } from "./auth";
+import { downloadBatchReport, getBatchStatus, getReceipt, downloadReceiptPdf, saveBlob, uploadPaymentBatch, getAccounts, type Account } from "./api";
+import { clearSession, EmpresaSession, loadSession, loginEmpresa, saveSession, changePasswordEmpresa } from "./auth";
 import { config } from "./config";
 import { clearHistory, readHistory, updateHistoryStatus, upsertHistory } from "./storage";
 import type { BatchHistoryItem, BatchStatus, BatchStatusName, Receipt, UploadResponse } from "./types";
 
-const terminalStatuses: BatchStatusName[] = ["COMPLETED", "FAILED", "REJECTED"];
-type AppView = "overview" | "payments" | "reports" | "security";
+const terminalStatuses: BatchStatusName[] = ["COMPLETED", "COMPLETED_WITH_ISSUES", "FAILED", "REJECTED"];
+type AppView = "overview" | "payments" | "reports" | "accounts";
 
 const viewMeta: Record<AppView, { eyebrow: string; title: string }> = {
   overview: { eyebrow: "Banca empresarial", title: "Centro de control corporativo" },
   payments: { eyebrow: "Pagos masivos", title: "Carga y seguimiento de lotes" },
   reports: { eyebrow: "Reporteria", title: "Novedades y comprobantes" },
-  security: { eyebrow: "Integraciones", title: "Conectividad con microservicios" }
+  accounts: { eyebrow: "Finanzas", title: "Cuentas y saldos" }
 };
 
 export function App() {
@@ -55,6 +55,16 @@ export function App() {
 
   if (!session) {
     return <LoginPage onLogin={handleLogin} />;
+  }
+
+  if (session.mustChangePassword) {
+    return (
+      <ForceChangePasswordPage
+        session={session}
+        onPasswordChanged={() => handleLogin({ ...session, mustChangePassword: false })}
+        onLogout={handleLogout}
+      />
+    );
   }
 
   return <Dashboard session={session} onLogout={handleLogout} />;
@@ -137,7 +147,7 @@ function Dashboard({ session, onLogout }: { session: EmpresaSession; onLogout: (
           });
       setHistory(nextHistory);
       if (!options?.quiet) {
-        setNotice({ type: "success", message: "Estado actualizado desde routing-service." });
+        setNotice({ type: "success", message: "Estado del lote actualizado exitosamente." });
       }
     } catch (error) {
       setStatus(null);
@@ -182,7 +192,7 @@ function Dashboard({ session, onLogout }: { session: EmpresaSession; onLogout: (
     }
   }
 
-  const canDownload = status?.status === "COMPLETED";
+  const canDownload = status?.status === "COMPLETED" || status?.status === "COMPLETED_WITH_ISSUES" || status?.status === "FAILED";
 
   return (
     <main className="bank-shell">
@@ -194,9 +204,7 @@ function Dashboard({ session, onLogout }: { session: EmpresaSession; onLogout: (
             <h1>{viewMeta[activeView].title}</h1>
           </div>
           <div className="topbar-actions">
-            <div className="connection-pill">
-              <span>Switch operativo</span>
-              <strong>{compactUrl(config.apiBaseUrl)}</strong>
+            <div className="connection-pill" style={{ opacity: 0 }}>
             </div>
             <button type="button" className="icon-only quiet" aria-label="Seguridad">
               <LockKeyhole size={19} />
@@ -234,7 +242,7 @@ function Dashboard({ session, onLogout }: { session: EmpresaSession; onLogout: (
         {activeView === "payments" && (
           <section className="workspace">
             <div className="primary-column">
-              <UploadPanel onUploaded={handleUploaded} onNotice={setNotice} />
+              <UploadPanel onUploaded={handleUploaded} onNotice={setNotice} session={session} />
               <StatusPanel
                 batchId={selectedBatchId}
                 setBatchId={setSelectedBatchId}
@@ -305,7 +313,7 @@ function Dashboard({ session, onLogout }: { session: EmpresaSession; onLogout: (
           </section>
         )}
 
-        {activeView === "security" && <IntegrationPanel />}
+        {activeView === "accounts" && <AccountsPanel customerId={session.customerId} />}
       </section>
     </main>
   );
@@ -335,9 +343,9 @@ function Sidebar({
 }) {
   const items = [
     { label: "Resumen", icon: LayoutDashboard, view: "overview" },
+    { label: "Cuentas", icon: Banknote, view: "accounts" },
     { label: "Pagos masivos", icon: WalletCards, view: "payments" },
-    { label: "Reportes", icon: FileText, view: "reports" },
-    { label: "Seguridad", icon: ShieldCheck, view: "security" }
+    { label: "Reportes", icon: FileText, view: "reports" }
   ] as const;
 
   return (
@@ -401,7 +409,7 @@ function OperationsPanel({ onNavigate }: { onNavigate: (view: AppView) => void }
         </span>
         <div>
           <h2>Operaciones disponibles</h2>
-          <p>Flujo listo para consumir Kong Switch y los microservicios conectados.</p>
+          <p>Gestiona los pagos masivos de tu empresa.</p>
         </div>
       </div>
       <div className="operation-list">
@@ -409,7 +417,7 @@ function OperationsPanel({ onNavigate }: { onNavigate: (view: AppView) => void }
           <WalletCards size={20} />
           <span>
             <strong>Cargar pagos masivos</strong>
-            <small>Envio a file-reception por Kong Switch.</small>
+            <small>Sube tu archivo de pagos para procesamiento.</small>
           </span>
           <ArrowUpRight size={18} />
         </button>
@@ -417,7 +425,7 @@ function OperationsPanel({ onNavigate }: { onNavigate: (view: AppView) => void }
           <Clock3 size={20} />
           <span>
             <strong>Consultar lote</strong>
-            <small>Seguimiento de estado desde routing-service.</small>
+            <small>Consulta el estado de tus pagos enviados.</small>
           </span>
           <ArrowUpRight size={18} />
         </button>
@@ -434,53 +442,50 @@ function OperationsPanel({ onNavigate }: { onNavigate: (view: AppView) => void }
   );
 }
 
-function IntegrationPanel() {
-  const endpoints = [
-    { owner: "Alan", service: "file-reception-service", method: "POST", path: config.uploadPath },
-    { owner: "Paul", service: "routing-service", method: "GET", path: config.batchStatusPath },
-    { owner: "Anthony", service: "report-service", method: "GET", path: config.batchReportPath },
-    { owner: "Anthony", service: "report-service", method: "GET", path: config.receiptPath }
-  ];
+function AccountsPanel({ customerId }: { customerId: number }) {
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    getAccounts(customerId)
+      .then(setAccounts)
+      .catch((err) => setError(err instanceof Error ? err.message : "Error al cargar cuentas"))
+      .finally(() => setLoading(false));
+  }, [customerId]);
 
   return (
     <section className="integration-grid">
-      <div className="panel integration-card">
+      <div className="panel integration-card" style={{ width: "100%", gridColumn: "1 / -1" }}>
         <div className="panel-title">
           <span className="title-icon">
-            <ShieldCheck size={20} />
+            <Banknote size={20} />
           </span>
           <div>
-            <h2>Conexion por defecto</h2>
-            <p>El front consume el Switch por Kong y no llama directamente a micros ajenos.</p>
+            <h2>Tus cuentas empresariales</h2>
+            <p>Consulta tus saldos disponibles y el estado de tus cuentas.</p>
           </div>
         </div>
-        <div className="connection-large">
-          <span>Gateway activo</span>
-          <strong>{config.apiBaseUrl}</strong>
-        </div>
-      </div>
-      <div className="panel endpoint-panel">
-        <div className="panel-title">
-          <span className="title-icon">
-            <Landmark size={20} />
-          </span>
-          <div>
-            <h2>Rutas consumidas</h2>
-            <p>Contratos usados por el front empresarial.</p>
+        {loading && <div style={{ padding: "2rem", textAlign: "center" }}><Loader2 className="spin" size={24} style={{ margin: "auto" }}/></div>}
+        {error && <div className="login-error"><AlertCircle size={16}/><span>{error}</span></div>}
+        {!loading && !error && (
+          <div className="endpoint-list" style={{ marginTop: "1rem" }}>
+            {accounts.map(acc => (
+              <div className="endpoint-row" key={acc.accountId} style={{ display: "flex", justifyContent: "space-between", padding: "1.5rem" }}>
+                <div>
+                  <strong>Cuenta Empresarial</strong>
+                  <div style={{ color: "var(--fg-muted)", fontSize: "0.85rem", marginTop: "0.25rem" }}>{acc.accountNumber}</div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <strong style={{ fontSize: "1.1rem" }}>{new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(acc.availableBalance)}</strong>
+                  <div style={{ color: "var(--fg-muted)", fontSize: "0.85rem", marginTop: "0.25rem" }}>
+                    Estado: <span style={{ color: acc.status === "ACTIVA" ? "var(--good)" : "inherit" }}>{acc.status}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
-        <div className="endpoint-list">
-          {endpoints.map((endpoint) => (
-            <div className="endpoint-row" key={`${endpoint.method}-${endpoint.path}`}>
-              <span className="method">{endpoint.method}</span>
-              <span>
-                <strong>{endpoint.service}</strong>
-                <small>{endpoint.owner}</small>
-              </span>
-              <code>{endpoint.path}</code>
-            </div>
-          ))}
-        </div>
+        )}
       </div>
     </section>
   );
@@ -488,13 +493,15 @@ function IntegrationPanel() {
 
 function UploadPanel({
   onUploaded,
-  onNotice
+  onNotice,
+  session
 }: {
   onUploaded: (response: UploadResponse, meta: UploadMeta) => Promise<void>;
   onNotice: (notice: UiNotice) => void;
+  session: EmpresaSession;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const [clientRuc, setClientRuc] = useState("");
+  const [clientRuc, setClientRuc] = useState(session.username);
   const [serviceType, setServiceType] = useState(config.serviceTypes[0]);
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -529,7 +536,7 @@ function UploadPanel({
         </span>
         <div>
           <h2>Cargar lote de pagos</h2>
-          <p>Envio seguro al Switch de Pagos Masivos V2.</p>
+          <p>Sube tu archivo CSV para procesar nóminas o pagos a proveedores.</p>
         </div>
       </div>
 
@@ -541,6 +548,7 @@ function UploadPanel({
             onChange={(event) => setClientRuc(onlyDigits(event.target.value).slice(0, 13))}
             inputMode="numeric"
             placeholder="1790012345001"
+            disabled
           />
         </label>
         <label>
@@ -626,7 +634,7 @@ function StatusPanel(props: {
 
       <div className="progress-head">
         <div>
-          <span>Avance operativo</span>
+          <span>Avance del lote</span>
           <strong>{Math.round(progress)}%</strong>
         </div>
         <label className="switch">
@@ -718,7 +726,24 @@ function ReportsPanel(props: {
           <Metric label="Dispersado" value={moneyText(props.receipt.totalAmountDispatched)} tone="good" />
           <Metric label="Comision" value={moneyText(props.receipt.commissionCharged)} />
           <Metric label="IVA" value={moneyText(props.receipt.ivaCharged)} />
-          <small>{props.receipt.receiptUuid}</small>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1rem" }}>
+            <small>{props.receipt.receiptUuid}</small>
+            <button 
+              type="button" 
+              className="action-button secondary-action" 
+              style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }} 
+              disabled={props.loadingReceipt}
+              onClick={async () => {
+                try {
+                  const blob = await downloadReceiptPdf(props.receipt!.batchId);
+                  saveBlob(blob, `comprobante_${props.receipt!.batchId}.pdf`);
+                } catch (e) {
+                  alert("Error descargando PDF");
+                }
+              }}>
+              Descargar PDF
+            </button>
+          </div>
         </div>
       ) : (
         <div className="empty-card">
@@ -878,7 +903,12 @@ function StatCard({ icon: Icon, label, value, tone }: { icon: typeof Building2; 
 }
 
 function StatusBadge({ status, compact }: { status: BatchStatusName; compact?: boolean }) {
-  const Icon = status === "COMPLETED" ? CheckCircle2 : status === "FAILED" || status === "REJECTED" ? XCircle : Clock3;
+  const Icon =
+    status === "COMPLETED" || status === "COMPLETED_WITH_ISSUES"
+      ? CheckCircle2
+      : status === "FAILED" || status === "REJECTED"
+      ? XCircle
+      : Clock3;
   return (
     <span className={`status-badge ${compact ? "compact" : ""} ${status.toLowerCase()}`}>
       <Icon size={compact ? 13 : 16} />
@@ -897,8 +927,8 @@ function Metric({ label, value, tone, wide }: { label: string; value: string; to
 }
 
 function validateUpload(file: File | null, clientRuc: string) {
-  if (!/^\d{10,13}$/.test(clientRuc.trim())) {
-    return "El RUC debe tener entre 10 y 13 digitos.";
+  if (!clientRuc || clientRuc.trim().length === 0) {
+    return "El RUC/Usuario de la empresa no puede estar vacio.";
   }
   if (!file) {
     return "Selecciona un archivo CSV o TXT.";
@@ -947,7 +977,8 @@ function normalize(status?: string): BatchStatusName {
 }
 
 function buildDashboardStats(history: BatchHistoryItem[], status: BatchStatus | null) {
-  const completed = history.filter((item) => item.status === "COMPLETED").length + (status?.status === "COMPLETED" ? 1 : 0);
+  const isCompletedStatus = (s?: BatchStatusName) => s === "COMPLETED" || s === "COMPLETED_WITH_ISSUES";
+  const completed = history.filter((item) => isCompletedStatus(item.status)).length + (isCompletedStatus(status?.status) ? 1 : 0);
   const inFlight = history.filter((item) => item.status === "RECEIVED" || item.status === "PROCESSING" || item.status === "COMPLETING").length;
   const amount =
     history.reduce((sum, item) => sum + (item.successfulAmount || 0), 0) + (status?.successfulAmount && !history.some((item) => item.batchId === status.batchId) ? status.successfulAmount : 0);
@@ -1013,10 +1044,99 @@ function statusLabel(status: BatchStatusName) {
     RECEIVED: "Recibido",
     PROCESSING: "Procesando",
     COMPLETING: "Cerrando",
-    COMPLETED: "Completado",
+    COMPLETED: "Exitoso",
+    COMPLETED_WITH_ISSUES: "Exitoso con novedad",
     FAILED: "Fallido",
     REJECTED: "Rechazado",
     UNKNOWN: "Sin estado"
   };
   return labels[status];
+}
+
+function ForceChangePasswordPage({
+  session,
+  onPasswordChanged,
+  onLogout
+}: {
+  session: EmpresaSession;
+  onPasswordChanged: () => void;
+  onLogout: () => void;
+}) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError("");
+    if (newPassword !== confirmPassword) {
+      setError("Las contraseñas no coinciden.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await changePasswordEmpresa(session.username, currentPassword, newPassword);
+      onPasswordChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al cambiar contraseña.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="login-shell">
+      <main className="login-form-area" style={{ margin: "auto" }}>
+        <div className="login-card">
+          <div className="login-header">
+            <h2>Actualización obligatoria</h2>
+            <p>Por seguridad, debes cambiar tu contraseña.</p>
+          </div>
+          {error && (
+            <div className="login-error">
+              <AlertCircle size={16} />
+              <span>{error}</span>
+            </div>
+          )}
+          <form onSubmit={handleSubmit} className="login-fields">
+            <label>
+              <span>Contraseña actual</span>
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                required
+              />
+            </label>
+            <label>
+              <span>Nueva contraseña</span>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+              />
+            </label>
+            <label>
+              <span>Confirmar nueva contraseña</span>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+              />
+            </label>
+            <button type="submit" className="login-submit" disabled={loading}>
+              {loading ? <Loader2 size={17} className="spin" /> : "Actualizar"}
+            </button>
+            <button type="button" className="secondary-action" onClick={onLogout} style={{ marginTop: "1rem", width: "100%", justifyContent: "center" }}>
+              <LogOut size={16} /> Cancelar y salir
+            </button>
+          </form>
+        </div>
+      </main>
+    </div>
+  );
 }

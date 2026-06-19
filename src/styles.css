@@ -722,6 +722,11 @@ button:disabled {
   color: #166534;
 }
 
+.status-badge.completed_with_issues {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
 .status-badge.failed,
 .status-badge.rejected {
   background: #fee2e2;

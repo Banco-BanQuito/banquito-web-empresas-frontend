@@ -6,8 +6,28 @@ export default defineConfig({
   server: {
     port: 3003,
     proxy: {
-      "/api": {
-        target: "http://localhost:8010",
+      "/api/v2/auth": {
+        target: "http://localhost:8083",
+        changeOrigin: true
+      },
+      "^/api/v2/payments/batches/.+/status": {
+        target: "http://localhost:8085",
+        changeOrigin: true
+      },
+      "^/api/v2/payments/batches/.+/report": {
+        target: "http://localhost:8088",
+        changeOrigin: true
+      },
+      "^/api/v2/payments/receipts": {
+        target: "http://localhost:8088",
+        changeOrigin: true
+      },
+      "^/api/v2/payments/batches": {
+        target: "http://localhost:8084",
+        changeOrigin: true
+      },
+      "^/api/v2/accounts": {
+        target: "http://localhost:8081",
         changeOrigin: true
       }
     }
