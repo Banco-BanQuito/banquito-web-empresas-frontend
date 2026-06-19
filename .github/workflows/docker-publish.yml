@@ -29,3 +29,6 @@ jobs:
           file: Dockerfile
           push: true
           tags: ghcr.io/banco-banquito/web-empresas-frontend:latest
+          build-args: |
+            VITE_PARTY_API_BASE_URL=http://${{ secrets.VM_PUBLIC_IP }}:8083
+            VITE_API_BASE_URL=http://${{ secrets.VM_PUBLIC_IP }}:8000
