@@ -81,6 +81,7 @@ function Dashboard({ session, onLogout }: { session: EmpresaSession; onLogout: (
   const [downloadingReport, setDownloadingReport] = useState(false);
   const [loadingReceipt, setLoadingReceipt] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [confirmingLogout, setConfirmingLogout] = useState(false);
 
   const selectedHistory = useMemo(
     () => history.find((item) => item.batchId === selectedBatchId),
@@ -206,11 +207,15 @@ function Dashboard({ session, onLogout }: { session: EmpresaSession; onLogout: (
           <div className="topbar-actions">
             <div className="connection-pill" style={{ opacity: 0 }}>
             </div>
-            <button type="button" className="icon-only quiet" aria-label="Cerrar sesión" title="Cerrar sesión" onClick={onLogout}>
+            <button type="button" className="icon-only quiet" aria-label="Cerrar sesión" title="Cerrar sesión" onClick={() => setConfirmingLogout(true)}>
               <LockKeyhole size={19} />
             </button>
           </div>
         </header>
+
+        {confirmingLogout && (
+          <ConfirmLogoutModal onCancel={() => setConfirmingLogout(false)} onConfirm={onLogout} />
+        )}
 
         {notice && <Notice notice={notice} onClose={() => setNotice(null)} />}
 
@@ -796,6 +801,48 @@ function Notice({ notice, onClose }: { notice: UiNotice; onClose: () => void }) 
       <button type="button" onClick={onClose} aria-label="Cerrar aviso">
         <XCircle size={18} />
       </button>
+    </div>
+  );
+}
+
+function ConfirmLogoutModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(15, 23, 42, 0.45)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000
+      }}
+    >
+      <div
+        style={{
+          background: "#fff",
+          borderRadius: "12px",
+          padding: "1.75rem",
+          maxWidth: "360px",
+          width: "90%",
+          boxShadow: "0 10px 40px rgba(0,0,0,0.2)"
+        }}
+      >
+        <h2 style={{ marginTop: 0 }}>¿Cerrar sesión?</h2>
+        <p style={{ color: "var(--muted, #64748b)" }}>
+          Vas a salir de BanQuito Empresas. Tendrás que volver a iniciar sesión para continuar.
+        </p>
+        <div style={{ display: "flex", gap: "0.75rem", marginTop: "1.25rem" }}>
+          <button type="button" className="secondary-action" style={{ flex: 1, justifyContent: "center" }} onClick={onCancel}>
+            Cancelar
+          </button>
+          <button type="button" className="primary-action" style={{ flex: 1, justifyContent: "center" }} onClick={onConfirm}>
+            <LogOut size={16} /> Cerrar sesión
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
