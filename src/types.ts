@@ -28,6 +28,7 @@ export interface BatchStatus {
   updatedAt?: string;
   completedAt?: string;
   message?: string;
+  failureReason?: string;
 }
 
 export interface Receipt {

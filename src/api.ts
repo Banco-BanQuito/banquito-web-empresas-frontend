@@ -78,7 +78,8 @@ export async function getBatchStatus(batchId: string, signal?: AbortSignal): Pro
     createdAt: firstText(body, ["createdAt", "created_at"]),
     updatedAt: firstText(body, ["updatedAt", "updated_at"]),
     completedAt: firstText(body, ["completedAt", "completed_at"]),
-    message: firstText(body, ["message"])
+    message: firstText(body, ["message"]),
+    failureReason: firstText(body, ["failureReason", "failure_reason"])
   };
 }
 

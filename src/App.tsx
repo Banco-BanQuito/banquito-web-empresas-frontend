@@ -206,7 +206,7 @@ function Dashboard({ session, onLogout }: { session: EmpresaSession; onLogout: (
           <div className="topbar-actions">
             <div className="connection-pill" style={{ opacity: 0 }}>
             </div>
-            <button type="button" className="icon-only quiet" aria-label="Seguridad">
+            <button type="button" className="icon-only quiet" aria-label="Cerrar sesión" title="Cerrar sesión" onClick={onLogout}>
               <LockKeyhole size={19} />
             </button>
           </div>
@@ -374,10 +374,6 @@ function Sidebar({
         <Building2 size={16} />
         <span>{session.fullName}</span>
       </div>
-      <button type="button" className="sidebar-logout" onClick={onLogout}>
-        <LogOut size={16} />
-        <span>Cerrar sesión</span>
-      </button>
     </aside>
   );
 }
