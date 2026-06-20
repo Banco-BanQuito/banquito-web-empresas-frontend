@@ -31,13 +31,14 @@ import { clearHistory, readHistory, updateHistoryStatus, upsertHistory } from ".
 import type { BatchHistoryItem, BatchStatus, BatchStatusName, Receipt, UploadResponse } from "./types";
 
 const terminalStatuses: BatchStatusName[] = ["COMPLETED", "COMPLETED_WITH_ISSUES", "FAILED", "REJECTED"];
-type AppView = "overview" | "payments" | "reports" | "accounts";
+type AppView = "overview" | "payments" | "reports" | "accounts" | "template";
 
 const viewMeta: Record<AppView, { eyebrow: string; title: string }> = {
   overview: { eyebrow: "Banca empresarial", title: "Centro de control corporativo" },
   payments: { eyebrow: "Pagos masivos", title: "Carga y seguimiento de lotes" },
   reports: { eyebrow: "Reporteria", title: "Novedades y comprobantes" },
-  accounts: { eyebrow: "Finanzas", title: "Cuentas y saldos" }
+  accounts: { eyebrow: "Finanzas", title: "Cuentas y saldos" },
+  template: { eyebrow: "Pagos masivos", title: "Formato de carga" }
 };
 
 export function App() {
@@ -319,6 +320,8 @@ function Dashboard({ session, onLogout }: { session: EmpresaSession; onLogout: (
         )}
 
         {activeView === "accounts" && <AccountsPanel customerId={session.customerId} />}
+
+        {activeView === "template" && <TemplatePanel />}
       </section>
     </main>
   );
@@ -350,6 +353,7 @@ function Sidebar({
     { label: "Resumen", icon: LayoutDashboard, view: "overview" },
     { label: "Cuentas", icon: Banknote, view: "accounts" },
     { label: "Pagos masivos", icon: WalletCards, view: "payments" },
+    { label: "Formato de carga", icon: Download, view: "template" },
     { label: "Reportes", icon: FileText, view: "reports" }
   ] as const;
 
@@ -802,6 +806,52 @@ function Notice({ notice, onClose }: { notice: UiNotice; onClose: () => void }) 
         <XCircle size={18} />
       </button>
     </div>
+  );
+}
+
+function TemplatePanel() {
+  function handleDownload() {
+    const rows = [
+      "1750285577001,NOMINA,2026-06-18T12:10:00,0040000001,2,30.00",
+      "1,001,1234567890001,NOMBRE BENEFICIARIO 1,2200000002,15.00,Pago de Nomina,beneficiario1@correo.com",
+      "2,001,1700000001,NOMBRE BENEFICIARIO 2,3300000003,15.00,Pago de Nomina,beneficiario2@correo.com",
+      "SEC-PLANTILLA,2,30.00"
+    ];
+    const blob = new Blob([rows.join("\r\n") + "\r\n"], { type: "text/csv" });
+    saveBlob(blob, "plantilla_carga_masiva_banquito.csv");
+  }
+
+  return (
+    <section className="panel">
+      <div className="panel-title">
+        <span className="title-icon">
+          <Download size={20} />
+        </span>
+        <div>
+          <h2>Plantilla de carga masiva</h2>
+          <p>Descarga el formato CSV que acepta el banco y reemplaza los valores de ejemplo con tus datos reales.</p>
+        </div>
+      </div>
+
+      <div className="download-row">
+        <button type="button" className="primary-action" onClick={handleDownload}>
+          <Download size={18} />
+          <span>Descargar plantilla CSV</span>
+        </button>
+      </div>
+
+      <div style={{ marginTop: "1.5rem" }}>
+        <p style={{ fontWeight: 600, marginBottom: "0.5rem" }}>Estructura del archivo</p>
+        <ul style={{ paddingLeft: "1.25rem", lineHeight: 1.7, color: "var(--muted, #64748b)" }}>
+          <li><strong>Línea 1 (cabecera):</strong> ruc_empresa, servicio, fecha_generacion (ISO), cuenta_matriz, total_registros, monto_total</li>
+          <li><strong>Líneas intermedias (detalle):</strong> secuencial, codigo_banco, identificacion_beneficiario, nombre_beneficiario, cuenta_destino, monto, referencia, email</li>
+          <li><strong>Última línea (pie):</strong> codigo_seguridad, total_registros, monto_total</li>
+        </ul>
+        <p style={{ marginTop: "0.75rem", color: "var(--muted, #64748b)" }}>
+          El total de registros y el monto total deben coincidir exactamente entre la cabecera, el pie y la suma de las líneas de detalle, o el archivo será rechazado.
+        </p>
+      </div>
+    </section>
   );
 }
 
