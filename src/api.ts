@@ -238,7 +238,7 @@ export interface Account {
 
 export async function getAccounts(customerId: number, signal?: AbortSignal): Promise<Account[]> {
   const safeCustomerId = String(customerId);
-  if (!/^[0-9]+$/.test(safeCustomerId)) {
+  if (!/^\d+$/.test(safeCustomerId)) {
     throw new Error("customerId inválido");
   }
   const response = await fetch(`/api/v2/accounts/customer/${safeCustomerId}`, { signal });
