@@ -30,7 +30,13 @@ import { config } from "./config";
 import { clearHistory, readHistory, updateHistoryStatus, upsertHistory } from "./storage";
 import type { BatchHistoryItem, BatchStatus, BatchStatusName, Receipt, UploadResponse } from "./types";
 
-const terminalStatuses: BatchStatusName[] = ["COMPLETED", "COMPLETED_WITH_ISSUES", "FAILED", "REJECTED"];
+const terminalStatuses = new Set<BatchStatusName>(["COMPLETED", "COMPLETED_WITH_ISSUES", "FAILED", "REJECTED"]);
+const templateRows = [
+  "1750285577001,NOMINA,2026-06-18T12:10:00,0040000001,2,30.00",
+  "1,001,1234567890001,NOMBRE BENEFICIARIO 1,2200000002,15.00,Pago de Nomina,beneficiario1@correo.com",
+  "2,001,1700000001,NOMBRE BENEFICIARIO 2,3300000003,15.00,Pago de Nomina,beneficiario2@correo.com",
+  "SEC-PLANTILLA,2,30.00"
+];
 type AppView = "overview" | "payments" | "reports" | "accounts" | "template";
 
 const viewMeta: Record<AppView, { eyebrow: string; title: string }> = {
@@ -71,7 +77,7 @@ export function App() {
   return <Dashboard session={session} onLogout={handleLogout} />;
 }
 
-function Dashboard({ session, onLogout }: { session: EmpresaSession; onLogout: () => void }) {
+function Dashboard({ session, onLogout }: Readonly<{ session: EmpresaSession; onLogout: () => void }>) {
   const [activeView, setActiveView] = useState<AppView>("overview");
   const [history, setHistory] = useState<BatchHistoryItem[]>(() => readHistory());
   const [selectedBatchId, setSelectedBatchId] = useState("");
@@ -92,13 +98,13 @@ function Dashboard({ session, onLogout }: { session: EmpresaSession; onLogout: (
   const dashboardStats = useMemo(() => buildDashboardStats(history, status), [history, status]);
 
   useEffect(() => {
-    if (!selectedBatchId || !autoRefresh || terminalStatuses.includes(status?.status || "UNKNOWN")) {
+    if (!selectedBatchId || !autoRefresh || terminalStatuses.has(status?.status || "UNKNOWN")) {
       return;
     }
-    const interval = window.setInterval(() => {
+    const interval = globalThis.setInterval(() => {
       void refreshStatus(selectedBatchId, { quiet: true });
     }, config.pollIntervalMs);
-    return () => window.clearInterval(interval);
+    return () => globalThis.clearInterval(interval);
   }, [selectedBatchId, autoRefresh, status?.status]);
 
   async function handleUploaded(response: UploadResponse, meta: UploadMeta) {
@@ -338,17 +344,22 @@ interface UiNotice {
   message: string;
 }
 
+function downloadTemplateCsv() {
+  const blob = new Blob([templateRows.join("\r\n") + "\r\n"], { type: "text/csv" });
+  saveBlob(blob, "plantilla_carga_masiva_banquito.csv");
+}
+
 function Sidebar({
   activeView,
   onNavigate,
   session,
   onLogout,
-}: {
+}: Readonly<{
   activeView: AppView;
   onNavigate: (view: AppView) => void;
   session: EmpresaSession;
   onLogout: () => void;
-}) {
+}>) {
   const items = [
     { label: "Resumen", icon: LayoutDashboard, view: "overview" },
     { label: "Cuentas", icon: Banknote, view: "accounts" },
@@ -387,7 +398,7 @@ function Sidebar({
   );
 }
 
-function DashboardStrip({ stats }: { stats: ReturnType<typeof buildDashboardStats> }) {
+function DashboardStrip({ stats }: Readonly<{ stats: ReturnType<typeof buildDashboardStats> }>) {
   return (
     <section className="executive-strip" aria-label="Resumen ejecutivo">
       <div className="executive-card primary">
@@ -405,7 +416,7 @@ function DashboardStrip({ stats }: { stats: ReturnType<typeof buildDashboardStat
   );
 }
 
-function OperationsPanel({ onNavigate }: { onNavigate: (view: AppView) => void }) {
+function OperationsPanel({ onNavigate }: Readonly<{ onNavigate: (view: AppView) => void }>) {
   return (
     <section className="panel operations-panel">
       <div className="panel-title">
@@ -447,7 +458,7 @@ function OperationsPanel({ onNavigate }: { onNavigate: (view: AppView) => void }
   );
 }
 
-function AccountsPanel({ customerId }: { customerId: number }) {
+function AccountsPanel({ customerId }: Readonly<{ customerId: number }>) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -500,11 +511,11 @@ function UploadPanel({
   onUploaded,
   onNotice,
   session
-}: {
+}: Readonly<{
   onUploaded: (response: UploadResponse, meta: UploadMeta) => Promise<void>;
   onNotice: (notice: UiNotice) => void;
   session: EmpresaSession;
-}) {
+}>) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [clientRuc, setClientRuc] = useState(session.username);
   const [serviceType, setServiceType] = useState(config.serviceTypes[0]);
@@ -594,7 +605,7 @@ function UploadPanel({
   );
 }
 
-function StatusPanel(props: {
+function StatusPanel(props: Readonly<{
   batchId: string;
   setBatchId: (value: string) => void;
   status: BatchStatus | null;
@@ -603,7 +614,7 @@ function StatusPanel(props: {
   autoRefresh: boolean;
   setAutoRefresh: (value: boolean) => void;
   onRefresh: () => void;
-}) {
+}>) {
   const displayedStatus = props.status?.status || props.selectedHistory?.status || "UNKNOWN";
   const declaredRecords = props.status?.declaredTotalRecords ?? props.selectedHistory?.declaredRecords;
   const successfulRecords = props.status?.successfulRecords ?? props.selectedHistory?.successfulRecords;
@@ -645,7 +656,7 @@ function StatusPanel(props: {
         <label className="switch">
           <input type="checkbox" checked={props.autoRefresh} onChange={(event) => props.setAutoRefresh(event.target.checked)} />
           <span />
-          Auto
+          <span>Auto</span>
         </label>
       </div>
 
@@ -669,15 +680,16 @@ function StatusPanel(props: {
   );
 }
 
-function ProgressBar(props: { total?: number; successful?: number; rejected?: number; inProcess?: number }) {
+function ProgressBar(props: Readonly<{ total?: number; successful?: number; rejected?: number; inProcess?: number }>) {
   const total = props.total && props.total > 0 ? props.total : 0;
   const successful = total ? percent(props.successful, total) : 0;
   const rejected = total ? percent(props.rejected, total) : 0;
-  const inProcess = total
-    ? typeof props.inProcess === "number"
-      ? percent(props.inProcess, total)
-      : Math.max(0, 100 - successful - rejected)
-    : 0;
+  let inProcess = 0;
+  if (total && typeof props.inProcess === "number") {
+    inProcess = percent(props.inProcess, total);
+  } else if (total) {
+    inProcess = Math.max(0, 100 - successful - rejected);
+  }
 
   return (
     <div className="progress-block" aria-label="Progreso del lote">
@@ -695,7 +707,7 @@ function ProgressBar(props: { total?: number; successful?: number; rejected?: nu
   );
 }
 
-function ReportsPanel(props: {
+function ReportsPanel(props: Readonly<{
   canDownload: boolean;
   status: BatchStatus | null;
   receipt: Receipt | null;
@@ -703,7 +715,7 @@ function ReportsPanel(props: {
   loadingReceipt: boolean;
   onDownloadReport: () => void;
   onReceipt: () => void;
-}) {
+}>) {
   return (
     <section className="panel reports-panel">
       <div className="panel-title">
@@ -742,8 +754,9 @@ function ReportsPanel(props: {
                 try {
                   const blob = await downloadReceiptPdf(props.receipt!.batchId);
                   saveBlob(blob, `comprobante_${props.receipt!.batchId}.pdf`);
-                } catch (e) {
-                  alert("Error descargando PDF");
+                } catch (error) {
+                  const message = error instanceof Error ? error.message : "Error descargando PDF";
+                  alert(message);
                 }
               }}>
               Descargar PDF
@@ -760,12 +773,12 @@ function ReportsPanel(props: {
   );
 }
 
-function HistoryPanel(props: {
+function HistoryPanel(props: Readonly<{
   history: BatchHistoryItem[];
   selectedBatchId: string;
   onSelect: (batchId: string) => void;
   onClear: () => void;
-}) {
+}>) {
   return (
     <aside className="panel history-panel">
       <div className="history-header">
@@ -796,8 +809,13 @@ function HistoryPanel(props: {
   );
 }
 
-function Notice({ notice, onClose }: { notice: UiNotice; onClose: () => void }) {
-  const Icon = notice.type === "success" ? CheckCircle2 : notice.type === "error" ? AlertCircle : Clock3;
+function Notice({ notice, onClose }: Readonly<{ notice: UiNotice; onClose: () => void }>) {
+  let Icon = Clock3;
+  if (notice.type === "success") {
+    Icon = CheckCircle2;
+  } else if (notice.type === "error") {
+    Icon = AlertCircle;
+  }
   return (
     <div className={`notice ${notice.type}`}>
       <Icon size={18} />
@@ -810,17 +828,6 @@ function Notice({ notice, onClose }: { notice: UiNotice; onClose: () => void }) 
 }
 
 function TemplatePanel() {
-  function handleDownload() {
-    const rows = [
-      "1750285577001,NOMINA,2026-06-18T12:10:00,0040000001,2,30.00",
-      "1,001,1234567890001,NOMBRE BENEFICIARIO 1,2200000002,15.00,Pago de Nomina,beneficiario1@correo.com",
-      "2,001,1700000001,NOMBRE BENEFICIARIO 2,3300000003,15.00,Pago de Nomina,beneficiario2@correo.com",
-      "SEC-PLANTILLA,2,30.00"
-    ];
-    const blob = new Blob([rows.join("\r\n") + "\r\n"], { type: "text/csv" });
-    saveBlob(blob, "plantilla_carga_masiva_banquito.csv");
-  }
-
   return (
     <section className="panel">
       <div className="panel-title">
@@ -834,7 +841,7 @@ function TemplatePanel() {
       </div>
 
       <div className="download-row">
-        <button type="button" className="primary-action" onClick={handleDownload}>
+        <button type="button" className="primary-action" onClick={downloadTemplateCsv}>
           <Download size={18} />
           <span>Descargar plantilla CSV</span>
         </button>
@@ -855,10 +862,10 @@ function TemplatePanel() {
   );
 }
 
-function ConfirmLogoutModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
+function ConfirmLogoutModal({ onCancel, onConfirm }: Readonly<{ onCancel: () => void; onConfirm: () => void }>) {
   return (
-    <div
-      role="dialog"
+    <dialog
+      open
       aria-modal="true"
       style={{
         position: "fixed",
@@ -893,11 +900,11 @@ function ConfirmLogoutModal({ onCancel, onConfirm }: { onCancel: () => void; onC
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }
 
-function LoginPage({ onLogin }: { onLogin: (session: EmpresaSession) => void }) {
+function LoginPage({ onLogin }: Readonly<{ onLogin: (session: EmpresaSession) => void }>) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -985,7 +992,7 @@ function LoginPage({ onLogin }: { onLogin: (session: EmpresaSession) => void }) 
   );
 }
 
-function StatCard({ icon: Icon, label, value, tone }: { icon: typeof Building2; label: string; value: string; tone?: "good" }) {
+function StatCard({ icon: Icon, label, value, tone }: Readonly<{ icon: typeof Building2; label: string; value: string; tone?: "good" }>) {
   return (
     <div className={`stat-card ${tone || ""}`}>
       <Icon size={20} />
@@ -995,13 +1002,13 @@ function StatCard({ icon: Icon, label, value, tone }: { icon: typeof Building2; 
   );
 }
 
-function StatusBadge({ status, compact }: { status: BatchStatusName; compact?: boolean }) {
-  const Icon =
-    status === "COMPLETED" || status === "COMPLETED_WITH_ISSUES"
-      ? CheckCircle2
-      : status === "FAILED" || status === "REJECTED"
-      ? XCircle
-      : Clock3;
+function StatusBadge({ status, compact }: Readonly<{ status: BatchStatusName; compact?: boolean }>) {
+  let Icon = Clock3;
+  if (status === "COMPLETED" || status === "COMPLETED_WITH_ISSUES") {
+    Icon = CheckCircle2;
+  } else if (status === "FAILED" || status === "REJECTED") {
+    Icon = XCircle;
+  }
   return (
     <span className={`status-badge ${compact ? "compact" : ""} ${status.toLowerCase()}`}>
       <Icon size={compact ? 13 : 16} />
@@ -1010,7 +1017,7 @@ function StatusBadge({ status, compact }: { status: BatchStatusName; compact?: b
   );
 }
 
-function Metric({ label, value, tone, wide }: { label: string; value: string; tone?: "good" | "bad"; wide?: boolean }) {
+function Metric({ label, value, tone, wide }: Readonly<{ label: string; value: string; tone?: "good" | "bad"; wide?: boolean }>) {
   return (
     <div className={`metric ${tone || ""} ${wide ? "wide" : ""}`}>
       <span>{label}</span>
@@ -1064,9 +1071,14 @@ function normalize(status?: string): BatchStatusName {
   if (value === "RECHAZADO" || value === "RECHAZADA") {
     return "REJECTED";
   }
-  return terminalStatuses.includes(value as BatchStatusName) || value === "RECEIVED" || value === "PROCESSING" || value === "COMPLETING"
-    ? (value as BatchStatusName)
-    : "UNKNOWN";
+  if (value && isBatchStatusName(value)) {
+    return value;
+  }
+  return "UNKNOWN";
+}
+
+function isBatchStatusName(value: string): value is BatchStatusName {
+  return terminalStatuses.has(value as BatchStatusName) || value === "RECEIVED" || value === "PROCESSING" || value === "COMPLETING";
 }
 
 function buildDashboardStats(history: BatchHistoryItem[], status: BatchStatus | null) {
@@ -1150,11 +1162,11 @@ function ForceChangePasswordPage({
   session,
   onPasswordChanged,
   onLogout
-}: {
+}: Readonly<{
   session: EmpresaSession;
   onPasswordChanged: () => void;
   onLogout: () => void;
-}) {
+}>) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");

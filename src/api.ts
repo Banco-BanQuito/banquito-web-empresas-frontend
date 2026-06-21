@@ -123,7 +123,8 @@ export function saveBlob(blob: Blob, filename: string) {
 
 function url(path: string, batchId?: string) {
   const resolved = batchId ? path.replace(":batchId", encodeURIComponent(batchId)) : path;
-  return `${config.apiBaseUrl}${resolved.startsWith("/") ? resolved : `/${resolved}`}`;
+  const normalizedPath = resolved.startsWith("/") ? resolved : "/" + resolved;
+  return `${config.apiBaseUrl}${normalizedPath}`;
 }
 
 async function parseJson(response: Response) {
@@ -139,8 +140,17 @@ async function parseJson(response: Response) {
 }
 
 function toApiError(response: Response, body: unknown, fallback: string) {
-  const message = typeof body === "object" && body ? ("message" in body ? String((body as any).message) : "error" in body ? String((body as any).error) : fallback) : fallback;
+  let message = fallback;
+  if (hasTextProperty(body, "message")) {
+    message = String(body.message);
+  } else if (hasTextProperty(body, "error")) {
+    message = String(body.error);
+  }
   return new ApiError(message, response.status, body);
+}
+
+function hasTextProperty(body: unknown, key: "message" | "error"): body is Record<typeof key, unknown> {
+  return typeof body === "object" && body !== null && key in body;
 }
 
 function firstText(body: unknown, keys: string[]) {
@@ -203,10 +213,16 @@ function normalizeStatus(status?: string): BatchStatus["status"] {
   if (value === "RECHAZADO" || value === "RECHAZADA") {
     return "REJECTED";
   }
-  if (value === "RECEIVED" || value === "PROCESSING" || value === "COMPLETING" || value === "COMPLETED" || value === "COMPLETED_WITH_ISSUES" || value === "FAILED" || value === "REJECTED") {
-    return value as BatchStatus["status"];
+  if (isKnownBatchStatus(value)) {
+    return value;
   }
   return "UNKNOWN";
+}
+
+const knownBatchStatuses = new Set<string>(["RECEIVED", "PROCESSING", "COMPLETING", "COMPLETED", "COMPLETED_WITH_ISSUES", "FAILED", "REJECTED"]);
+
+function isKnownBatchStatus(value: string): value is BatchStatus["status"] {
+  return knownBatchStatuses.has(value);
 }
 
 export interface Account {
