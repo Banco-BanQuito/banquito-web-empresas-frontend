@@ -240,7 +240,7 @@ export async function getAccounts(customerId: number, signal?: AbortSignal): Pro
   if (!Number.isInteger(customerId) || customerId <= 0) {
     throw new Error("customerId inválido");
   }
-  const response = await fetch(`/api/v2/accounts/customer/${customerId}`, { signal });
+  const response = await fetch(`/api/v2/accounts/customer/${encodeURIComponent(customerId)}`, { signal });
   if (!response.ok) {
     throw new Error("No se pudieron cargar las cuentas");
   }
