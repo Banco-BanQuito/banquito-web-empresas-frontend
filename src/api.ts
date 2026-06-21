@@ -237,10 +237,11 @@ export interface Account {
 }
 
 export async function getAccounts(customerId: number, signal?: AbortSignal): Promise<Account[]> {
-  if (!Number.isInteger(customerId) || customerId <= 0) {
+  const safeCustomerId = String(customerId);
+  if (!/^[0-9]+$/.test(safeCustomerId)) {
     throw new Error("customerId inválido");
   }
-  const response = await fetch(`/api/v2/accounts/customer/${encodeURIComponent(customerId)}`, { signal });
+  const response = await fetch(`/api/v2/accounts/customer/${safeCustomerId}`, { signal });
   if (!response.ok) {
     throw new Error("No se pudieron cargar las cuentas");
   }
