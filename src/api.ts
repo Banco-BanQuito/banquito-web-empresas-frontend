@@ -83,7 +83,7 @@ export async function getReceipt(batchId: string): Promise<Receipt> {
   if (!response.ok) {
     throw toApiError(response, body, "No se pudo generar el comprobante.");
   }
-  return body as Receipt;
+  return body;
 }
 
 export function saveBlob(blob: Blob, filename: string) {
@@ -99,7 +99,8 @@ export function saveBlob(blob: Blob, filename: string) {
 
 function url(path: string, batchId?: string) {
   const resolved = batchId ? path.replace(":batchId", encodeURIComponent(batchId)) : path;
-  return `${config.apiBaseUrl}${resolved.startsWith("/") ? resolved : `/${resolved}`}`;
+  const normalizedPath = resolved.startsWith("/") ? resolved : "/" + resolved;
+  return `${config.apiBaseUrl}${normalizedPath}`;
 }
 
 async function parseJson(response: Response) {
@@ -115,8 +116,12 @@ async function parseJson(response: Response) {
 }
 
 function toApiError(response: Response, body: unknown, fallback: string) {
-  const message = typeof body === "object" && body && "message" in body ? String((body as { message: unknown }).message) : fallback;
+  const message = hasMessage(body) ? String(body.message) : fallback;
   return new ApiError(message, response.status, body);
+}
+
+function hasMessage(body: unknown): body is { message: unknown } {
+  return typeof body === "object" && body !== null && "message" in body;
 }
 
 function firstText(body: unknown, keys: string[]) {

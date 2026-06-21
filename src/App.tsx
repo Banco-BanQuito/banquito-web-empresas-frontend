@@ -28,7 +28,7 @@ import { config } from "./config";
 import { clearHistory, readHistory, updateHistoryStatus, upsertHistory } from "./storage";
 import type { BatchHistoryItem, BatchStatus, BatchStatusName, Receipt, UploadResponse } from "./types";
 
-const terminalStatuses: BatchStatusName[] = ["COMPLETED", "FAILED", "REJECTED"];
+const terminalStatuses = new Set<BatchStatusName>(["COMPLETED", "FAILED", "REJECTED"]);
 type AppView = "overview" | "payments" | "reports" | "security";
 
 const viewMeta: Record<AppView, { eyebrow: string; title: string }> = {
@@ -58,13 +58,13 @@ export function App() {
   const dashboardStats = useMemo(() => buildDashboardStats(history, status), [history, status]);
 
   useEffect(() => {
-    if (!selectedBatchId || !autoRefresh || terminalStatuses.includes(status?.status || "UNKNOWN")) {
+    if (!selectedBatchId || !autoRefresh || terminalStatuses.has(status?.status || "UNKNOWN")) {
       return;
     }
-    const interval = window.setInterval(() => {
+    const interval = globalThis.setInterval(() => {
       void refreshStatus(selectedBatchId, { quiet: true });
     }, config.pollIntervalMs);
-    return () => window.clearInterval(interval);
+    return () => globalThis.clearInterval(interval);
   }, [selectedBatchId, autoRefresh, status?.status]);
 
   async function handleUploaded(response: UploadResponse, meta: UploadMeta) {
@@ -300,7 +300,7 @@ interface UiNotice {
   message: string;
 }
 
-function Sidebar({ activeView, onNavigate }: { activeView: AppView; onNavigate: (view: AppView) => void }) {
+function Sidebar({ activeView, onNavigate }: Readonly<{ activeView: AppView; onNavigate: (view: AppView) => void }>) {
   const items = [
     { label: "Resumen", icon: LayoutDashboard, view: "overview" },
     { label: "Pagos masivos", icon: WalletCards, view: "payments" },
@@ -338,7 +338,7 @@ function Sidebar({ activeView, onNavigate }: { activeView: AppView; onNavigate: 
   );
 }
 
-function DashboardStrip({ stats }: { stats: ReturnType<typeof buildDashboardStats> }) {
+function DashboardStrip({ stats }: Readonly<{ stats: ReturnType<typeof buildDashboardStats> }>) {
   return (
     <section className="executive-strip" aria-label="Resumen ejecutivo">
       <div className="executive-card primary">
@@ -356,7 +356,7 @@ function DashboardStrip({ stats }: { stats: ReturnType<typeof buildDashboardStat
   );
 }
 
-function OperationsPanel({ onNavigate }: { onNavigate: (view: AppView) => void }) {
+function OperationsPanel({ onNavigate }: Readonly<{ onNavigate: (view: AppView) => void }>) {
   return (
     <section className="panel operations-panel">
       <div className="panel-title">
@@ -453,10 +453,10 @@ function IntegrationPanel() {
 function UploadPanel({
   onUploaded,
   onNotice
-}: {
+}: Readonly<{
   onUploaded: (response: UploadResponse, meta: UploadMeta) => Promise<void>;
   onNotice: (notice: UiNotice) => void;
-}) {
+}>) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [clientRuc, setClientRuc] = useState("");
   const [serviceType, setServiceType] = useState(config.serviceTypes[0]);
@@ -545,7 +545,7 @@ function UploadPanel({
   );
 }
 
-function StatusPanel(props: {
+function StatusPanel(props: Readonly<{
   batchId: string;
   setBatchId: (value: string) => void;
   status: BatchStatus | null;
@@ -554,7 +554,7 @@ function StatusPanel(props: {
   autoRefresh: boolean;
   setAutoRefresh: (value: boolean) => void;
   onRefresh: () => void;
-}) {
+}>) {
   const displayedStatus = props.status?.status || props.selectedHistory?.status || "UNKNOWN";
   const declaredRecords = props.status?.declaredTotalRecords ?? props.selectedHistory?.declaredRecords;
   const successfulRecords = props.status?.successfulRecords ?? props.selectedHistory?.successfulRecords;
@@ -596,7 +596,7 @@ function StatusPanel(props: {
         <label className="switch">
           <input type="checkbox" checked={props.autoRefresh} onChange={(event) => props.setAutoRefresh(event.target.checked)} />
           <span />
-          Auto
+          <span>Auto</span>
         </label>
       </div>
 
@@ -620,15 +620,14 @@ function StatusPanel(props: {
   );
 }
 
-function ProgressBar(props: { total?: number; successful?: number; rejected?: number; inProcess?: number }) {
+function ProgressBar(props: Readonly<{ total?: number; successful?: number; rejected?: number; inProcess?: number }>) {
   const total = props.total && props.total > 0 ? props.total : 0;
   const successful = total ? percent(props.successful, total) : 0;
   const rejected = total ? percent(props.rejected, total) : 0;
-  const inProcess = total
-    ? typeof props.inProcess === "number"
-      ? percent(props.inProcess, total)
-      : Math.max(0, 100 - successful - rejected)
-    : 0;
+  let inProcess = 0;
+  if (total) {
+    inProcess = typeof props.inProcess === "number" ? percent(props.inProcess, total) : Math.max(0, 100 - successful - rejected);
+  }
 
   return (
     <div className="progress-block" aria-label="Progreso del lote">
@@ -646,7 +645,7 @@ function ProgressBar(props: { total?: number; successful?: number; rejected?: nu
   );
 }
 
-function ReportsPanel(props: {
+function ReportsPanel(props: Readonly<{
   canDownload: boolean;
   status: BatchStatus | null;
   receipt: Receipt | null;
@@ -654,7 +653,9 @@ function ReportsPanel(props: {
   loadingReceipt: boolean;
   onDownloadReport: () => void;
   onReceipt: () => void;
-}) {
+}>) {
+  const emptyMessage = props.status ? "Selecciona una accion cuando el lote este completo." : "Sin lote seleccionado.";
+
   return (
     <section className="panel reports-panel">
       <div className="panel-title">
@@ -687,19 +688,19 @@ function ReportsPanel(props: {
       ) : (
         <div className="empty-card">
           <Banknote size={22} />
-          <span>{props.status ? "Selecciona una accion cuando el lote este completo." : "Sin lote seleccionado."}</span>
+          <span>{emptyMessage}</span>
         </div>
       )}
     </section>
   );
 }
 
-function HistoryPanel(props: {
+function HistoryPanel(props: Readonly<{
   history: BatchHistoryItem[];
   selectedBatchId: string;
   onSelect: (batchId: string) => void;
   onClear: () => void;
-}) {
+}>) {
   return (
     <aside className="panel history-panel">
       <div className="history-header">
@@ -730,8 +731,13 @@ function HistoryPanel(props: {
   );
 }
 
-function Notice({ notice, onClose }: { notice: UiNotice; onClose: () => void }) {
-  const Icon = notice.type === "success" ? CheckCircle2 : notice.type === "error" ? AlertCircle : Clock3;
+function Notice({ notice, onClose }: Readonly<{ notice: UiNotice; onClose: () => void }>) {
+  let Icon = Clock3;
+  if (notice.type === "success") {
+    Icon = CheckCircle2;
+  } else if (notice.type === "error") {
+    Icon = AlertCircle;
+  }
   return (
     <div className={`notice ${notice.type}`}>
       <Icon size={18} />
@@ -743,7 +749,7 @@ function Notice({ notice, onClose }: { notice: UiNotice; onClose: () => void }) 
   );
 }
 
-function StatCard({ icon: Icon, label, value, tone }: { icon: typeof Building2; label: string; value: string; tone?: "good" }) {
+function StatCard({ icon: Icon, label, value, tone }: Readonly<{ icon: typeof Building2; label: string; value: string; tone?: "good" }>) {
   return (
     <div className={`stat-card ${tone || ""}`}>
       <Icon size={20} />
@@ -753,8 +759,13 @@ function StatCard({ icon: Icon, label, value, tone }: { icon: typeof Building2; 
   );
 }
 
-function StatusBadge({ status, compact }: { status: BatchStatusName; compact?: boolean }) {
-  const Icon = status === "COMPLETED" ? CheckCircle2 : status === "FAILED" || status === "REJECTED" ? XCircle : Clock3;
+function StatusBadge({ status, compact }: Readonly<{ status: BatchStatusName; compact?: boolean }>) {
+  let Icon = Clock3;
+  if (status === "COMPLETED") {
+    Icon = CheckCircle2;
+  } else if (status === "FAILED" || status === "REJECTED") {
+    Icon = XCircle;
+  }
   return (
     <span className={`status-badge ${compact ? "compact" : ""} ${status.toLowerCase()}`}>
       <Icon size={compact ? 13 : 16} />
@@ -763,7 +774,7 @@ function StatusBadge({ status, compact }: { status: BatchStatusName; compact?: b
   );
 }
 
-function Metric({ label, value, tone, wide }: { label: string; value: string; tone?: "good" | "bad"; wide?: boolean }) {
+function Metric({ label, value, tone, wide }: Readonly<{ label: string; value: string; tone?: "good" | "bad"; wide?: boolean }>) {
   return (
     <div className={`metric ${tone || ""} ${wide ? "wide" : ""}`}>
       <span>{label}</span>
@@ -817,9 +828,10 @@ function normalize(status?: string): BatchStatusName {
   if (value === "RECHAZADO" || value === "RECHAZADA") {
     return "REJECTED";
   }
-  return terminalStatuses.includes(value as BatchStatusName) || value === "RECEIVED" || value === "PROCESSING" || value === "COMPLETING"
-    ? (value as BatchStatusName)
-    : "UNKNOWN";
+  if (terminalStatuses.has(value as BatchStatusName) || value === "RECEIVED" || value === "PROCESSING" || value === "COMPLETING") {
+    return value as BatchStatusName;
+  }
+  return "UNKNOWN";
 }
 
 function buildDashboardStats(history: BatchHistoryItem[], status: BatchStatus | null) {
