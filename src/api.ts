@@ -247,3 +247,37 @@ export async function getAccounts(customerId: number, signal?: AbortSignal): Pro
   }
   return await response.json();
 }
+
+export interface AccountTransaction {
+  transactionUuid: string;
+  movementType: "DEBITO" | "CREDITO";
+  amount: number;
+  resultingBalance: number;
+  transactionDate: string;
+  accountingDate: string;
+  description: string;
+}
+
+export interface TransactionHistory {
+  content: AccountTransaction[];
+  totalElements: number;
+  page: number;
+}
+
+export async function getAccountTransactions(
+  accountId: number,
+  page = 0,
+  size = 10,
+  signal?: AbortSignal
+): Promise<TransactionHistory> {
+  const safeAccountId = String(accountId);
+  if (!/^\d+$/.test(safeAccountId)) {
+    throw new Error("accountId inválido");
+  }
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  const response = await fetch(`/api/v2/accounts/${safeAccountId}/transactions?${params}`, { signal });
+  if (!response.ok) {
+    throw new Error("No se pudieron cargar los movimientos");
+  }
+  return await response.json();
+}

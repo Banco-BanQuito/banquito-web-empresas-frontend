@@ -1,10 +1,15 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
+  ArrowDownCircle,
+  ArrowLeftRight,
+  ArrowUpCircle,
   ArrowUpRight,
   Banknote,
   Building2,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   Download,
   FileCheck2,
@@ -24,7 +29,18 @@ import {
   WalletCards,
   XCircle
 } from "lucide-react";
-import { downloadBatchReport, getBatchStatus, getReceipt, downloadReceiptPdf, saveBlob, uploadPaymentBatch, getAccounts, type Account } from "./api";
+import {
+  downloadBatchReport,
+  getBatchStatus,
+  getReceipt,
+  downloadReceiptPdf,
+  saveBlob,
+  uploadPaymentBatch,
+  getAccounts,
+  getAccountTransactions,
+  type Account,
+  type AccountTransaction
+} from "./api";
 import { clearSession, EmpresaSession, loadSession, loginEmpresa, saveSession, changePasswordEmpresa } from "./auth";
 import { config } from "./config";
 import { clearHistory, readHistory, updateHistoryStatus, upsertHistory } from "./storage";
@@ -37,13 +53,14 @@ const templateRows = [
   "2,001,1700000001,NOMBRE BENEFICIARIO 2,3300000003,15.00,Pago de Nomina,beneficiario2@correo.com",
   "SEC-PLANTILLA,2,30.00"
 ];
-type AppView = "overview" | "payments" | "reports" | "accounts" | "template";
+type AppView = "overview" | "payments" | "reports" | "accounts" | "movements" | "template";
 
 const viewMeta: Record<AppView, { eyebrow: string; title: string }> = {
   overview: { eyebrow: "Banca empresarial", title: "Centro de control corporativo" },
   payments: { eyebrow: "Pagos masivos", title: "Carga y seguimiento de lotes" },
   reports: { eyebrow: "Reporteria", title: "Novedades y comprobantes" },
   accounts: { eyebrow: "Finanzas", title: "Cuentas y saldos" },
+  movements: { eyebrow: "Finanzas", title: "Movimientos de cuenta" },
   template: { eyebrow: "Pagos masivos", title: "Formato de carga" }
 };
 
@@ -327,6 +344,8 @@ function Dashboard({ session, onLogout }: Readonly<{ session: EmpresaSession; on
 
         {activeView === "accounts" && <AccountsPanel customerId={session.customerId} />}
 
+        {activeView === "movements" && <MovementsPanel customerId={session.customerId} />}
+
         {activeView === "template" && <TemplatePanel />}
       </section>
     </main>
@@ -363,6 +382,7 @@ function Sidebar({
   const items = [
     { label: "Resumen", icon: LayoutDashboard, view: "overview" },
     { label: "Cuentas", icon: Banknote, view: "accounts" },
+    { label: "Movimientos", icon: ArrowLeftRight, view: "movements" },
     { label: "Pagos masivos", icon: WalletCards, view: "payments" },
     { label: "Formato de carga", icon: Download, view: "template" },
     { label: "Reportes", icon: FileText, view: "reports" }
@@ -501,6 +521,210 @@ function AccountsPanel({ customerId }: Readonly<{ customerId: number }>) {
               </div>
             ))}
           </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+const MOVEMENTS_PAGE_SIZE = 10;
+
+function MovementsPanel({ customerId }: Readonly<{ customerId: number }>) {
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [transactions, setTransactions] = useState<AccountTransaction[]>([]);
+  const [totalElements, setTotalElements] = useState(0);
+  const [page, setPage] = useState(0);
+  const [loadingAccounts, setLoadingAccounts] = useState(true);
+  const [loadingTx, setLoadingTx] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    getAccounts(customerId)
+      .then((list) => {
+        setAccounts(list);
+        if (list.length > 0) {
+          setSelectedAccountId(String(list[0].accountId));
+        }
+      })
+      .catch(() => setError("No se pudieron cargar las cuentas."))
+      .finally(() => setLoadingAccounts(false));
+  }, [customerId]);
+
+  useEffect(() => {
+    if (!selectedAccountId) {
+      return;
+    }
+    setLoadingTx(true);
+    setError("");
+    getAccountTransactions(Number(selectedAccountId), page, MOVEMENTS_PAGE_SIZE)
+      .then((result) => {
+        setTransactions(result.content || []);
+        setTotalElements(result.totalElements || 0);
+      })
+      .catch(() => setError("No se pudieron cargar los movimientos."))
+      .finally(() => setLoadingTx(false));
+  }, [selectedAccountId, page]);
+
+  const totalPages = Math.ceil(totalElements / MOVEMENTS_PAGE_SIZE);
+  const selectedAccount = accounts.find((acc) => String(acc.accountId) === selectedAccountId);
+
+  function refresh() {
+    if (!selectedAccountId) {
+      return;
+    }
+    setLoadingTx(true);
+    setError("");
+    getAccountTransactions(Number(selectedAccountId), page, MOVEMENTS_PAGE_SIZE)
+      .then((result) => {
+        setTransactions(result.content || []);
+        setTotalElements(result.totalElements || 0);
+      })
+      .catch(() => setError("No se pudieron cargar los movimientos."))
+      .finally(() => setLoadingTx(false));
+  }
+
+  return (
+    <section className="integration-grid">
+      <div className="panel integration-card" style={{ width: "100%", gridColumn: "1 / -1" }}>
+        <div className="panel-title split">
+          <span className="title-icon">
+            <ArrowLeftRight size={20} />
+          </span>
+          <div>
+            <h2>Movimientos de cuenta</h2>
+            <p>Analiza las transacciones de una cuenta empresarial.</p>
+          </div>
+        </div>
+
+        {loadingAccounts && (
+          <div style={{ padding: "2rem", textAlign: "center" }}>
+            <Loader2 className="spin" size={24} style={{ margin: "auto" }} />
+          </div>
+        )}
+
+        {!loadingAccounts && accounts.length === 0 && !error && (
+          <div className="empty-card">
+            <Banknote size={22} />
+            <span>No tienes cuentas asociadas.</span>
+          </div>
+        )}
+
+        {!loadingAccounts && accounts.length > 0 && (
+          <div className="form-grid" style={{ marginTop: "1rem" }}>
+            <label>
+              <span>Cuenta</span>
+              <select
+                value={selectedAccountId}
+                onChange={(event) => {
+                  setSelectedAccountId(event.target.value);
+                  setPage(0);
+                  setTransactions([]);
+                }}
+              >
+                {accounts.map((acc) => (
+                  <option key={acc.accountId} value={acc.accountId}>
+                    {acc.accountNumber} — {acc.status} — {moneyText(acc.availableBalance)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+
+        {selectedAccount && (
+          <div className="metrics-grid" style={{ marginTop: "1rem" }}>
+            <Metric label="Saldo disponible" value={moneyText(selectedAccount.availableBalance)} />
+            <Metric label="Saldo contable" value={moneyText(selectedAccount.accountingBalance)} />
+          </div>
+        )}
+
+        {error && (
+          <div className="login-error" style={{ marginTop: "1rem" }}>
+            <AlertCircle size={16} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {selectedAccountId && (
+          <>
+            <div className="history-header" style={{ marginTop: "1.5rem" }}>
+              <div>
+                <h2 style={{ fontSize: "1rem" }}>Transacciones</h2>
+                <p>{totalElements > 0 ? `${totalElements} en total` : "Historial de movimientos"}</p>
+              </div>
+              <button type="button" className="icon-only subtle" onClick={refresh} disabled={loadingTx} aria-label="Actualizar movimientos">
+                <RefreshCw size={18} className={loadingTx ? "spin" : ""} />
+              </button>
+            </div>
+
+            {loadingTx && (
+              <div style={{ padding: "2rem", textAlign: "center" }}>
+                <Loader2 className="spin" size={24} style={{ margin: "auto" }} />
+              </div>
+            )}
+
+            {!loadingTx && transactions.length === 0 && !error && (
+              <div className="empty-card">
+                <ArrowLeftRight size={22} />
+                <span>No hay movimientos registrados para esta cuenta.</span>
+              </div>
+            )}
+
+            {!loadingTx && transactions.length > 0 && (
+              <div className="endpoint-list" style={{ marginTop: "0.5rem" }}>
+                {transactions.map((tx) => {
+                  const isDebit = tx.movementType === "DEBITO";
+                  return (
+                    <div className="endpoint-row" key={tx.transactionUuid} style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "1.25rem" }}>
+                      {isDebit ? (
+                        <ArrowUpCircle size={22} style={{ color: "var(--bad, #dc2626)" }} />
+                      ) : (
+                        <ArrowDownCircle size={22} style={{ color: "var(--good)" }} />
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <strong>{tx.description || "Sin descripcion"}</strong>
+                        <div style={{ color: "var(--fg-muted)", fontSize: "0.85rem", marginTop: "0.25rem" }}>
+                          {formatDateTime(tx.transactionDate)}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <strong style={{ color: isDebit ? "var(--bad, #dc2626)" : "var(--good)" }}>
+                          {isDebit ? "-" : "+"}
+                          {moneyText(tx.amount)}
+                        </strong>
+                        <div style={{ color: "var(--fg-muted)", fontSize: "0.85rem", marginTop: "0.25rem" }}>
+                          Saldo: {moneyText(tx.resultingBalance)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {totalPages > 1 && (
+              <div className="status-actions" style={{ justifyContent: "space-between" }}>
+                <span style={{ color: "var(--fg-muted)", fontSize: "0.85rem" }}>
+                  Pagina {page + 1} de {totalPages}
+                </span>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <button type="button" className="icon-only subtle" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0 || loadingTx} aria-label="Pagina anterior">
+                    <ChevronLeft size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-only subtle"
+                    onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                    disabled={page >= totalPages - 1 || loadingTx}
+                    aria-label="Pagina siguiente"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </section>
@@ -1122,6 +1346,21 @@ function completionPercent(total?: number, successful?: number, rejected?: numbe
     return 0;
   }
   return percent((successful || 0) + (rejected || 0), total);
+}
+
+function formatDateTime(value?: string) {
+  if (!value) {
+    return "-";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return (
+    date.toLocaleDateString("es-EC", { year: "numeric", month: "short", day: "numeric" }) +
+    " " +
+    date.toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" })
+  );
 }
 
 function moneyText(value?: number) {
