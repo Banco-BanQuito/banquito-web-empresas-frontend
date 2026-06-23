@@ -862,6 +862,13 @@ function StatusPanel(props: Readonly<{
         <StatusBadge status={displayedStatus} />
       </div>
 
+      {props.status?.failureReason && (
+        <div className="login-error">
+          <AlertCircle size={16} />
+          <span>{props.status.failureReason}</span>
+        </div>
+      )}
+
       <div className="lookup-row">
         <label>
           <span>Batch ID</span>
