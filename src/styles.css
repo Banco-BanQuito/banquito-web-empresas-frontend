@@ -7,6 +7,8 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  --good: #16a34a;
+  --bad: #dc2626;
 }
 
 * {
@@ -583,7 +585,7 @@ button:disabled {
   pointer-events: none;
 }
 
-.switch span {
+.switch-track {
   position: relative;
   width: 40px;
   height: 22px;
@@ -591,7 +593,7 @@ button:disabled {
   background: #cbd5e1;
 }
 
-.switch span::after {
+.switch-track::after {
   content: "";
   position: absolute;
   top: 3px;
@@ -603,11 +605,11 @@ button:disabled {
   transition: transform 0.15s ease;
 }
 
-.switch input:checked + span {
+.switch input:checked + .switch-track {
   background: #0f766e;
 }
 
-.switch input:checked + span::after {
+.switch input:checked + .switch-track::after {
   transform: translateX(18px);
 }
 

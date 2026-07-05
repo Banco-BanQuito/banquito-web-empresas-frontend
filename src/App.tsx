@@ -897,8 +897,8 @@ function StatusPanel(props: Readonly<{
         </div>
         <label className="switch">
           <input type="checkbox" checked={props.autoRefresh} onChange={(event) => props.setAutoRefresh(event.target.checked)} />
-          <span />
-          <span>Auto</span>
+          <span className="switch-track" />
+          <span className="switch-label">Auto</span>
         </label>
       </div>
 
