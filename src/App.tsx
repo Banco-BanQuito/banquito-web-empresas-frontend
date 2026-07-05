@@ -106,6 +106,7 @@ function Dashboard({ session, onLogout }: Readonly<{ session: EmpresaSession; on
   const [loadingReceipt, setLoadingReceipt] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [confirmingLogout, setConfirmingLogout] = useState(false);
+  const [accounts, setAccounts] = useState<Account[]>([]);
 
   const selectedHistory = useMemo(
     () => history.find((item) => item.batchId === selectedBatchId),
@@ -113,6 +114,16 @@ function Dashboard({ session, onLogout }: Readonly<{ session: EmpresaSession; on
   );
 
   const dashboardStats = useMemo(() => buildDashboardStats(history, status), [history, status]);
+  const totalBalance = useMemo(
+    () => accounts.reduce((sum, acc) => sum + (acc.availableBalance || 0), 0),
+    [accounts]
+  );
+
+  useEffect(() => {
+    getAccounts(session.customerId)
+      .then(setAccounts)
+      .catch(() => setAccounts([]));
+  }, [session.customerId]);
 
   useEffect(() => {
     if (!selectedBatchId || !autoRefresh || terminalStatuses.has(status?.status || "UNKNOWN")) {
@@ -245,7 +256,7 @@ function Dashboard({ session, onLogout }: Readonly<{ session: EmpresaSession; on
 
         {activeView === "overview" && (
           <>
-            <DashboardStrip stats={dashboardStats} />
+            <DashboardStrip stats={dashboardStats} balance={totalBalance} />
             <section className="overview-grid">
               <OperationsPanel onNavigate={setActiveView} />
               <HistoryPanel
@@ -418,7 +429,7 @@ function Sidebar({
   );
 }
 
-function DashboardStrip({ stats }: Readonly<{ stats: ReturnType<typeof buildDashboardStats> }>) {
+function DashboardStrip({ stats, balance }: Readonly<{ stats: ReturnType<typeof buildDashboardStats>; balance: number }>) {
   return (
     <section className="executive-strip" aria-label="Resumen ejecutivo">
       <div className="executive-card primary">
@@ -427,7 +438,7 @@ function DashboardStrip({ stats }: Readonly<{ stats: ReturnType<typeof buildDash
           <strong>BanQuito Empresas</strong>
           <small>Pagos, reportes y comprobantes en una sola consola.</small>
         </div>
-        <div className="executive-amount">{moneyText(stats.amount)}</div>
+        <div className="executive-amount">{moneyText(balance)}</div>
       </div>
       <StatCard icon={FileCheck2} label="Lotes registrados" value={numberText(stats.batches)} />
       <StatCard icon={CheckCircle2} label="Procesados" value={numberText(stats.completed)} tone="good" />
@@ -1316,13 +1327,10 @@ function buildDashboardStats(history: BatchHistoryItem[], status: BatchStatus | 
   const isCompletedStatus = (s?: BatchStatusName) => s === "COMPLETED" || s === "COMPLETED_WITH_ISSUES";
   const completed = history.filter((item) => isCompletedStatus(item.status)).length + (isCompletedStatus(status?.status) ? 1 : 0);
   const inFlight = history.filter((item) => item.status === "RECEIVED" || item.status === "PROCESSING" || item.status === "COMPLETING").length;
-  const amount =
-    history.reduce((sum, item) => sum + (item.successfulAmount || 0), 0) + (status?.successfulAmount && !history.some((item) => item.batchId === status.batchId) ? status.successfulAmount : 0);
   return {
     batches: history.length,
     completed,
-    inFlight,
-    amount
+    inFlight
   };
 }
 
