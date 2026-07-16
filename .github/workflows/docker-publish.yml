@@ -1,34 +1,56 @@
-name: Build and Push Docker Image
+name: Build, Push and Deploy to GKE
 
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: project-47695a8e-7cb2-4352-af2
+  GKE_CLUSTER: banquito-cluster-east
+  GKE_LOCATION: us-east1
+  AR_LOCATION: us-central1
+  AR_REPOSITORY: banquito
+  IMAGE_NAME: web-empresas-frontend
+  DEPLOYMENT_NAME: web-empresas-frontend
+  CONTAINER_NAME: web-empresas-frontend
+  NAMESPACE: banquito-frontend
 
 jobs:
-  build-and-push:
+  build-push-deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+      id-token: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+          workload_identity_provider: projects/69503932816/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider
+          service_account: github-actions-gke@project-47695a8e-7cb2-4352-af2.iam.gserviceaccount.com
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "$AR_LOCATION-docker.pkg.dev" --quiet
+      - name: Build image
+        run: |
+          IMAGE="$AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$AR_REPOSITORY/$IMAGE_NAME"
+          docker build -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" .
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+      - name: Push image
+        run: |
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
         with:
-          context: .
-          file: Dockerfile
-          push: true
-          tags: ghcr.io/banco-banquito/web-empresas-frontend:latest
-          build-args: |
-            VITE_PARTY_API_BASE_URL=http://${{ secrets.VM_PUBLIC_IP }}:8000
-            VITE_API_BASE_URL=http://${{ secrets.VM_PUBLIC_IP }}:8010
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_LOCATION }}
+          project_id: ${{ env.PROJECT_ID }}
+      - name: Deploy to GKE
+        run: |
+          kubectl set image deployment/$DEPLOYMENT_NAME $CONTAINER_NAME="$IMAGE:${{ github.sha }}" -n $NAMESPACE
+          kubectl rollout status deployment/$DEPLOYMENT_NAME -n $NAMESPACE --timeout=300s
