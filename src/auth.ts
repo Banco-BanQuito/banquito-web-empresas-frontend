@@ -8,6 +8,8 @@ export interface EmpresaSession {
   fullName: string;
   customerType: string;
   mustChangePassword: boolean;
+  idToken: string;
+  refreshToken: string;
 }
 
 export function loadSession(): EmpresaSession | null {
@@ -27,33 +29,66 @@ export function clearSession(): void {
   localStorage.removeItem(STORAGE_KEY);
 }
 
-export async function loginEmpresa(username: string, password: string): Promise<EmpresaSession> {
-  const response = await fetch(`${config.partyApiBaseUrl}/api/v2/auth/login`, {
+const SIGN_IN_URL = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${config.identityPlatformApiKey}`;
+const UPDATE_URL = `https://identitytoolkit.googleapis.com/v1/accounts:update?key=${config.identityPlatformApiKey}`;
+const LOOKUP_URL = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${config.identityPlatformApiKey}`;
+
+function toIdentityEmail(ruc: string): string {
+  return `${ruc}@banquito.internal`;
+}
+
+async function identityFetch(url: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify(body),
   });
-
-  const body = await response.json().catch(() => ({}));
-
+  const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message =
-      typeof body === "object" && body && "message" in body
-        ? String((body as { message: unknown }).message)
-        : "Credenciales incorrectas.";
+      typeof data === "object" && data && "error" in data
+        ? String((data.error as { message?: unknown })?.message ?? "Error de autenticación")
+        : "Error de autenticación";
     throw new Error(message);
   }
+  return data;
+}
 
-  if (body.customerType !== "JURIDICO") {
+export async function loginEmpresa(username: string, password: string): Promise<EmpresaSession> {
+  const signInData = await identityFetch(SIGN_IN_URL, {
+    email: toIdentityEmail(username),
+    password,
+    returnSecureToken: true,
+  });
+
+  const lookupData = await identityFetch(LOOKUP_URL, { idToken: signInData.idToken });
+  const users = lookupData.users as Array<{ createdAt?: string; lastLoginAt?: string }> | undefined;
+  const accountInfo = users?.[0];
+  const mustChangePassword = accountInfo ? accountInfo.createdAt === accountInfo.lastLoginAt : false;
+
+  // Identity Platform only proves *who* is signing in (the credential). The
+  // numeric customerId and business customerType live in party-service's
+  // own Customer record, keyed by the same identification (RUC) used as
+  // the login username, so we resolve it right after authenticating.
+  const customerResponse = await fetch(`${config.partyApiBaseUrl}/api/v2/customers/${username}`, {
+    headers: { Authorization: `Bearer ${signInData.idToken}` },
+  });
+  const customer = await customerResponse.json().catch(() => ({}));
+  if (!customerResponse.ok) {
+    throw new Error("No se encontró el perfil del cliente asociado a este usuario.");
+  }
+  if (customer.customerType !== "JURIDICO") {
     throw new Error("Este portal es exclusivo para empresas. Use Banca Web Personas para clientes individuales.");
   }
 
   return {
-    customerId: body.customerId,
-    username: body.username,
-    fullName: body.fullName,
-    customerType: body.customerType,
-    mustChangePassword: body.mustChangePassword ?? false,
+    customerId: Number(customer.id),
+    username,
+    fullName: String(customer.fullName || customer.legalName || username),
+    customerType: String(customer.customerType),
+    mustChangePassword,
+    idToken: String(signInData.idToken),
+    refreshToken: String(signInData.refreshToken),
   };
 }
 
@@ -62,18 +97,15 @@ export async function changePasswordEmpresa(
   currentPassword: string,
   newPassword: string
 ): Promise<void> {
-  const response = await fetch(`${config.partyApiBaseUrl}/api/v2/auth/change-password`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, currentPassword, newPassword }),
+  const signInData = await identityFetch(SIGN_IN_URL, {
+    email: toIdentityEmail(username),
+    password: currentPassword,
+    returnSecureToken: true,
   });
 
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    const message =
-      typeof body === "object" && body && "message" in body
-        ? String((body as { message: unknown }).message)
-        : "No se pudo cambiar la contraseña.";
-    throw new Error(message);
-  }
+  await identityFetch(UPDATE_URL, {
+    idToken: signInData.idToken,
+    password: newPassword,
+    returnSecureToken: true,
+  });
 }

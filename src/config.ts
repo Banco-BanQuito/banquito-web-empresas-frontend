@@ -7,7 +7,8 @@ export const config = {
   receiptPath: import.meta.env.VITE_RECEIPT_PATH || "/api/v2/payments/receipts/:batchId",
   maxUploadMb: Number(import.meta.env.VITE_MAX_UPLOAD_MB || 10),
   pollIntervalMs: Number(import.meta.env.VITE_POLL_INTERVAL_MS || 10000),
-  serviceTypes: splitCsv(import.meta.env.VITE_SERVICE_TYPES || "NOMINA,PROVEEDORES,INTERBANCARIO")
+  serviceTypes: splitCsv(import.meta.env.VITE_SERVICE_TYPES || "NOMINA,PROVEEDORES,INTERBANCARIO"),
+  identityPlatformApiKey: import.meta.env.VITE_IDENTITY_PLATFORM_API_KEY || ""
 };
 
 function trimTrailingSlash(value: string) {
