@@ -66,10 +66,6 @@ export async function loginEmpresa(username: string, password: string): Promise<
   const accountInfo = users?.[0];
   const mustChangePassword = accountInfo ? accountInfo.createdAt === accountInfo.lastLoginAt : false;
 
-  // Identity Platform only proves *who* is signing in (the credential). The
-  // numeric customerId and business customerType live in party-service's
-  // own Customer record, keyed by the same identification (RUC) used as
-  // the login username, so we resolve it right after authenticating.
   const customerResponse = await fetch(`${config.partyApiBaseUrl}/api/v2/customers/${username}`, {
     headers: { Authorization: `Bearer ${signInData.idToken}` },
   });
