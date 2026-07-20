@@ -38,10 +38,12 @@ jobs:
 
       - name: Read frontend secrets from Secret Manager
         run: |
-          echo "::add-mask::$(gcloud secrets versions access latest --secret=identity-platform-api-key --project "$PROJECT_ID")"
-          echo "::add-mask::$(gcloud secrets versions access latest --secret=app-web-empresas --project "$PROJECT_ID")"
-          echo "IDENTITY_PLATFORM_API_KEY=$(gcloud secrets versions access latest --secret=identity-platform-api-key --project "$PROJECT_ID")" >> "$GITHUB_ENV"
-          echo "APIGEE_API_KEY=$(gcloud secrets versions access latest --secret=app-web-empresas --project "$PROJECT_ID")" >> "$GITHUB_ENV"
+          IDENTITY_PLATFORM_API_KEY="$(gcloud secrets versions access latest --secret=identity-platform-api-key --project "$PROJECT_ID" | xargs)"
+          APIGEE_API_KEY="$(gcloud secrets versions access latest --secret=app-web-empresas --project "$PROJECT_ID" | xargs)"
+          echo "::add-mask::$IDENTITY_PLATFORM_API_KEY"
+          echo "::add-mask::$APIGEE_API_KEY"
+          echo "IDENTITY_PLATFORM_API_KEY=$IDENTITY_PLATFORM_API_KEY" >> "$GITHUB_ENV"
+          echo "APIGEE_API_KEY=$APIGEE_API_KEY" >> "$GITHUB_ENV"
 
       - name: Build image
         run: |
