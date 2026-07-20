@@ -1,8 +1,10 @@
+import { buildEnv } from "./build-env";
+
 export const config = {
   partyApiBaseUrl: trimTrailingSlash(import.meta.env.VITE_PARTY_API_BASE_URL || "http://localhost:8083"),
   apiBaseUrl: trimTrailingSlash(import.meta.env.VITE_API_BASE_URL || ""),
-  apigeeApiKey: import.meta.env.VITE_APIGEE_API_KEY || "",
-  identityPlatformApiKey: import.meta.env.VITE_IDENTITY_PLATFORM_API_KEY || "",
+  apigeeApiKey: buildEnv.apigeeApiKey || import.meta.env.VITE_APIGEE_API_KEY || "",
+  identityPlatformApiKey: buildEnv.identityPlatformApiKey || import.meta.env.VITE_IDENTITY_PLATFORM_API_KEY || "",
   uploadPath: import.meta.env.VITE_UPLOAD_PATH || "/api/v2/payments/batches",
   batchStatusPath: import.meta.env.VITE_BATCH_STATUS_PATH || "/api/v2/payments/batches/:batchId/status",
   batchReportPath: import.meta.env.VITE_BATCH_REPORT_PATH || "/api/v2/payments/batches/:batchId/report",
