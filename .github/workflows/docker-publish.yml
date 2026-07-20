@@ -38,8 +38,15 @@ jobs:
 
       - name: Read frontend secrets from Secret Manager
         run: |
-          IDENTITY_PLATFORM_API_KEY="$(gcloud secrets versions access latest --secret=identity-platform-api-key --project "$PROJECT_ID" | xargs)"
-          APIGEE_API_KEY="$(gcloud secrets versions access latest --secret=app-web-empresas --project "$PROJECT_ID" | xargs)"
+          set -euo pipefail
+          IDENTITY_PLATFORM_API_KEY="$(gcloud secrets versions access latest --secret=identity-platform-api-key --project "$PROJECT_ID")"
+          APIGEE_API_KEY="$(gcloud secrets versions access latest --secret=app-web-empresas --project "$PROJECT_ID")"
+          IDENTITY_PLATFORM_API_KEY="${IDENTITY_PLATFORM_API_KEY//$'\r'/}"
+          IDENTITY_PLATFORM_API_KEY="${IDENTITY_PLATFORM_API_KEY//$'\n'/}"
+          APIGEE_API_KEY="${APIGEE_API_KEY//$'\r'/}"
+          APIGEE_API_KEY="${APIGEE_API_KEY//$'\n'/}"
+          test -n "$IDENTITY_PLATFORM_API_KEY"
+          test -n "$APIGEE_API_KEY"
           echo "::add-mask::$IDENTITY_PLATFORM_API_KEY"
           echo "::add-mask::$APIGEE_API_KEY"
           echo "IDENTITY_PLATFORM_API_KEY=$IDENTITY_PLATFORM_API_KEY" >> "$GITHUB_ENV"
