@@ -4,7 +4,10 @@ import type { BatchStatus, Receipt, UploadResponse } from "./types";
 
 function authHeaders(): Record<string, string> {
   const session = loadSession();
-  return session?.idToken ? { Authorization: `Bearer ${session.idToken}` } : {};
+  return {
+    ...(session?.idToken ? { Authorization: `Bearer ${session.idToken}` } : {}),
+    ...(config.apigeeApiKey ? { "x-api-key": config.apigeeApiKey, apikey: config.apigeeApiKey } : {}),
+  };
 }
 
 export class ApiError extends Error {

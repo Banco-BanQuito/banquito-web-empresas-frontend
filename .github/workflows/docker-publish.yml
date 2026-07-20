@@ -38,7 +38,14 @@ jobs:
       - name: Build image
         run: |
           IMAGE="$AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$AR_REPOSITORY/$IMAGE_NAME"
-          docker build -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" .
+          docker build \
+            --build-arg VITE_IDENTITY_PLATFORM_API_KEY="${{ secrets.IDENTITY_PLATFORM_API_KEY }}" \
+            --build-arg VITE_APIGEE_API_KEY="${{ secrets.APIGEE_API_KEY }}" \
+            --build-arg VITE_PARTY_API_BASE_URL="${{ vars.VITE_PARTY_API_BASE_URL || 'https://136.68.89.25.nip.io' }}" \
+            --build-arg VITE_API_BASE_URL="${{ vars.VITE_API_BASE_URL || 'https://136.68.89.25.nip.io' }}" \
+            -t "$IMAGE:${{ github.sha }}" \
+            -t "$IMAGE:latest" \
+            .
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
       - name: Push image
         run: |

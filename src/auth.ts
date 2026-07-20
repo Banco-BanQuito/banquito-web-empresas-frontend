@@ -67,7 +67,7 @@ export async function loginEmpresa(username: string, password: string): Promise<
   const mustChangePassword = accountInfo ? accountInfo.createdAt === accountInfo.lastLoginAt : false;
 
   const customerResponse = await fetch(`${config.partyApiBaseUrl}/api/v2/customers/${username}`, {
-    headers: { Authorization: `Bearer ${signInData.idToken}` },
+    headers: apiHeaders({ Authorization: `Bearer ${signInData.idToken}` }),
   });
   const customer = await customerResponse.json().catch(() => ({}));
   if (!customerResponse.ok) {
@@ -104,4 +104,10 @@ export async function changePasswordEmpresa(
     password: newPassword,
     returnSecureToken: true,
   });
+}
+
+function apiHeaders(headers: Record<string, string>) {
+  return config.apigeeApiKey
+    ? { ...headers, "x-api-key": config.apigeeApiKey, apikey: config.apigeeApiKey }
+    : headers;
 }
