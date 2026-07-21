@@ -7,7 +7,7 @@ export const config = {
   identityPlatformApiKey: buildEnv.identityPlatformApiKey || import.meta.env.VITE_IDENTITY_PLATFORM_API_KEY || "",
   uploadPath: import.meta.env.VITE_UPLOAD_PATH || "/api/v2/payments/batches",
   batchStatusPath: import.meta.env.VITE_BATCH_STATUS_PATH || "/api/v2/payments/batches/:batchId/status",
-  batchReportPath: import.meta.env.VITE_BATCH_REPORT_PATH || "/api/v2/payments/batches/:batchId/report",
+  batchReportPath: import.meta.env.VITE_BATCH_REPORT_PATH || "/api/v2/reports/payments/batches/:batchId/report",
   receiptPath: import.meta.env.VITE_RECEIPT_PATH || "/api/v2/payments/receipts/:batchId",
   maxUploadMb: Number(import.meta.env.VITE_MAX_UPLOAD_MB || 10),
   pollIntervalMs: Number(import.meta.env.VITE_POLL_INTERVAL_MS || 10000),
