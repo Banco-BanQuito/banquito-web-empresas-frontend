@@ -26,7 +26,7 @@ Rutas usadas:
 | --- | --- |
 | Cargar lote | `POST /api/v2/payments/batches` |
 | Consultar estado | `GET /api/v2/payments/batches/:batchId/status` |
-| Descargar novedades | `GET /api/v2/payments/batches/:batchId/report` |
+| Descargar novedades | `GET /api/v2/reports/payments/batches/:batchId/report` |
 | Ver comprobante | `GET /api/v2/payments/receipts/:batchId` |
 
 Estas rutas corresponden a la configuracion de Kong en `banquito-infra/kong/switch/kong.yml`.
@@ -39,7 +39,7 @@ Copiar `.env.example` a `.env` si se necesita cambiar algun valor:
 VITE_API_BASE_URL=http://localhost:8010
 VITE_UPLOAD_PATH=/api/v2/payments/batches
 VITE_BATCH_STATUS_PATH=/api/v2/payments/batches/:batchId/status
-VITE_BATCH_REPORT_PATH=/api/v2/payments/batches/:batchId/report
+VITE_BATCH_REPORT_PATH=/api/v2/reports/payments/batches/:batchId/report
 VITE_RECEIPT_PATH=/api/v2/payments/receipts/:batchId
 VITE_MAX_UPLOAD_MB=10
 VITE_POLL_INTERVAL_MS=10000
