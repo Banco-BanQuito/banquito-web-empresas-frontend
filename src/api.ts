@@ -251,7 +251,7 @@ export async function getAccounts(customerId: number, signal?: AbortSignal): Pro
   if (!/^\d+$/.test(safeCustomerId)) {
     throw new Error("customerId inválido");
   }
-  const response = await fetch(`/api/v2/accounts/customer/${safeCustomerId}`, { headers: authHeaders(), signal });
+  const response = await fetch(url(`/api/v2/accounts/customer/${safeCustomerId}`), { headers: authHeaders(), signal });
   if (!response.ok) {
     throw new Error("No se pudieron cargar las cuentas");
   }
@@ -285,7 +285,7 @@ export async function getAccountTransactions(
     throw new Error("accountId inválido");
   }
   const params = new URLSearchParams({ page: String(page), size: String(size) });
-  const response = await fetch(`/api/v2/accounts/${safeAccountId}/transactions?${params}`, { headers: authHeaders(), signal });
+  const response = await fetch(url(`/api/v2/accounts/${safeAccountId}/transactions?${params}`), { headers: authHeaders(), signal });
   if (!response.ok) {
     throw new Error("No se pudieron cargar los movimientos");
   }
