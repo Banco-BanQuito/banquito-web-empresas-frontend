@@ -36,6 +36,7 @@ import {
   downloadReceiptPdf,
   saveBlob,
   uploadPaymentBatch,
+  ApiError,
   getAccounts,
   getAccountTransactions,
   type Account,
@@ -1287,6 +1288,13 @@ function validateUpload(file: File | null, clientRuc: string) {
 }
 
 function readableError(error: unknown) {
+  if (error instanceof ApiError) {
+    const details = error.details;
+    if (details && typeof details === "object" && "error" in details) {
+      return `${details.error}`;
+    }
+    return error.message || `Error HTTP ${error.status}`;
+  }
   if (error instanceof Error) {
     return error.message;
   }
