@@ -1,9 +1,9 @@
 import { config } from "./config";
-import { loadSession } from "./auth";
+import { getFreshSession } from "./auth";
 import type { BatchStatus, Receipt, UploadResponse } from "./types";
 
-function authHeaders(): Record<string, string> {
-  const session = loadSession();
+async function authHeaders(): Promise<Record<string, string>> {
+  const session = await getFreshSession();
   return {
     ...(session?.idToken ? { Authorization: `Bearer ${session.idToken}` } : {}),
     ...(config.apigeeApiKey ? { "x-api-key": config.apigeeApiKey, apikey: config.apigeeApiKey } : {}),
@@ -33,7 +33,7 @@ export async function uploadPaymentBatch(payload: {
 
   const response = await fetch(url(config.uploadPath), {
     method: "POST",
-    headers: authHeaders(),
+    headers: await authHeaders(),
     body: form,
     signal: payload.signal
   });
@@ -57,7 +57,7 @@ export async function uploadPaymentBatch(payload: {
 }
 
 export async function getBatchStatus(batchId: string, signal?: AbortSignal): Promise<BatchStatus> {
-  const response = await fetch(url(config.batchStatusPath, batchId), { headers: authHeaders(), signal });
+  const response = await fetch(url(config.batchStatusPath, batchId), { headers: await authHeaders(), signal });
   const body = await parseJson(response);
   if (!response.ok) {
     if (response.status === 404) {
@@ -94,7 +94,7 @@ export async function getBatchStatus(batchId: string, signal?: AbortSignal): Pro
 }
 
 export async function downloadBatchReport(batchId: string) {
-  const response = await fetch(url(config.batchReportPath, batchId), { headers: authHeaders() });
+  const response = await fetch(url(config.batchReportPath, batchId), { headers: await authHeaders() });
   if (!response.ok) {
     throw toApiError(response, await parseJson(response), "No se pudo descargar el reporte.");
   }
@@ -102,7 +102,7 @@ export async function downloadBatchReport(batchId: string) {
 }
 
 export async function getReceipt(batchId: string): Promise<Receipt> {
-  const response = await fetch(url(config.receiptPath, batchId), { headers: authHeaders() });
+  const response = await fetch(url(config.receiptPath, batchId), { headers: await authHeaders() });
   const body = await parseJson(response);
   if (!response.ok) {
     throw toApiError(response, body, "No se pudo generar el comprobante.");
@@ -111,7 +111,7 @@ export async function getReceipt(batchId: string): Promise<Receipt> {
 }
 
 export async function downloadReceiptPdf(batchId: string) {
-  const response = await fetch(url(config.receiptPath, batchId) + "/pdf", { headers: authHeaders() });
+  const response = await fetch(url(config.receiptPath, batchId) + "/pdf", { headers: await authHeaders() });
   if (!response.ok) {
     throw toApiError(response, await parseJson(response), "No se pudo descargar el PDF.");
   }
@@ -251,7 +251,7 @@ export async function getAccounts(customerId: number, signal?: AbortSignal): Pro
   if (!/^\d+$/.test(safeCustomerId)) {
     throw new Error("customerId inválido");
   }
-  const response = await fetch(url(`/api/v2/accounts/customer/${safeCustomerId}`), { headers: authHeaders(), signal });
+  const response = await fetch(url(`/api/v2/accounts/customer/${safeCustomerId}`), { headers: await authHeaders(), signal });
   if (!response.ok) {
     throw new Error("No se pudieron cargar las cuentas");
   }
@@ -285,7 +285,7 @@ export async function getAccountTransactions(
     throw new Error("accountId inválido");
   }
   const params = new URLSearchParams({ page: String(page), size: String(size) });
-  const response = await fetch(url(`/api/v2/accounts/${safeAccountId}/transactions?${params}`), { headers: authHeaders(), signal });
+  const response = await fetch(url(`/api/v2/accounts/${safeAccountId}/transactions?${params}`), { headers: await authHeaders(), signal });
   if (!response.ok) {
     throw new Error("No se pudieron cargar los movimientos");
   }

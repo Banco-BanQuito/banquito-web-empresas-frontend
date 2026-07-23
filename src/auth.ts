@@ -10,6 +10,7 @@ export interface EmpresaSession {
   mustChangePassword: boolean;
   idToken: string;
   refreshToken: string;
+  expiresAt?: number;
 }
 
 export function loadSession(): EmpresaSession | null {
@@ -32,6 +33,8 @@ export function clearSession(): void {
 const SIGN_IN_URL = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${config.identityPlatformApiKey}`;
 const UPDATE_URL = `https://identitytoolkit.googleapis.com/v1/accounts:update?key=${config.identityPlatformApiKey}`;
 const LOOKUP_URL = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${config.identityPlatformApiKey}`;
+const REFRESH_URL = `https://securetoken.googleapis.com/v1/token?key=${config.identityPlatformApiKey}`;
+const REFRESH_MARGIN_MS = 5 * 60 * 1000;
 
 function toIdentityEmail(ruc: string): string {
   return `${ruc}@banquito.internal`;
@@ -85,7 +88,44 @@ export async function loginEmpresa(username: string, password: string): Promise<
     mustChangePassword,
     idToken: String(signInData.idToken),
     refreshToken: String(signInData.refreshToken),
+    expiresAt: Date.now() + Number(signInData.expiresIn || 3600) * 1000,
   };
+}
+
+export async function getFreshSession(): Promise<EmpresaSession | null> {
+  const session = loadSession();
+  if (!session?.idToken || !session.refreshToken || !config.identityPlatformApiKey) {
+    return session;
+  }
+
+  if (session.expiresAt && session.expiresAt - Date.now() > REFRESH_MARGIN_MS) {
+    return session;
+  }
+
+  const response = await fetch(REFRESH_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: session.refreshToken,
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    clearSession();
+    globalThis.dispatchEvent(new CustomEvent("logout"));
+    throw new Error(String(data.error?.message || "Sesion expirada"));
+  }
+
+  const refreshed = {
+    ...session,
+    idToken: String(data.id_token),
+    refreshToken: String(data.refresh_token || session.refreshToken),
+    expiresAt: Date.now() + Number(data.expires_in || 3600) * 1000,
+  };
+  saveSession(refreshed);
+  return refreshed;
 }
 
 export async function changePasswordEmpresa(
