@@ -851,6 +851,7 @@ function StatusPanel(props: Readonly<{
   setAutoRefresh: (value: boolean) => void;
   onRefresh: () => void;
 }>) {
+  const hasTrackingData = Boolean(props.status || props.selectedHistory || props.batchId);
   const displayedStatus = props.status?.status || props.selectedHistory?.status || "UNKNOWN";
   const declaredRecords = props.status?.declaredTotalRecords ?? props.selectedHistory?.declaredRecords;
   const successfulRecords = props.status?.successfulRecords ?? props.selectedHistory?.successfulRecords;
@@ -860,6 +861,17 @@ function StatusPanel(props: Readonly<{
     props.selectedHistory?.inProcessRecords ??
     inferInProcess(declaredRecords, successfulRecords, rejectedRecords);
   const progress = completionPercent(declaredRecords, successfulRecords, rejectedRecords);
+  const smoothProgress = useSmoothNumber(progress);
+  const statusMessage = batchStatusMessage({
+    hasTrackingData,
+    loading: props.loading,
+    autoRefresh: props.autoRefresh,
+    status: displayedStatus,
+    declaredRecords,
+    successfulRecords,
+    rejectedRecords,
+    inProcessRecords
+  });
 
   return (
     <section className="panel status-panel">
@@ -869,9 +881,9 @@ function StatusPanel(props: Readonly<{
         </span>
         <div>
           <h2>Seguimiento del lote</h2>
-          <p>Consulta operativa con actualizacion automatica.</p>
+          <p>{statusMessage}</p>
         </div>
-        <StatusBadge status={displayedStatus} />
+        {hasTrackingData ? <StatusBadge status={displayedStatus} /> : <span className="status-badge idle"><Clock3 size={16} />Esperando lote</span>}
       </div>
 
       {props.status?.failureReason && (
@@ -894,7 +906,7 @@ function StatusPanel(props: Readonly<{
       <div className="progress-head">
         <div>
           <span>Avance del lote</span>
-          <strong>{percentText(progress)}</strong>
+          <strong>{percentText(smoothProgress)}</strong>
         </div>
         <label className="switch">
           <input type="checkbox" checked={props.autoRefresh} onChange={(event) => props.setAutoRefresh(event.target.checked)} />
@@ -904,6 +916,10 @@ function StatusPanel(props: Readonly<{
       </div>
 
       <ProgressBar total={declaredRecords} successful={successfulRecords} rejected={rejectedRecords} inProcess={inProcessRecords} />
+      <div className="progress-status-line">
+        <span>{statusMessage}</span>
+        {props.loading && <Loader2 className="spin" size={14} />}
+      </div>
 
       <div className="metrics-grid">
         <Metric label="Declaradas" value={numberText(declaredRecords)} />
@@ -936,10 +952,14 @@ function ProgressBar(props: Readonly<{ total?: number; successful?: number; reje
 
   return (
     <div className="progress-block" aria-label="Progreso del lote">
-      <div className="progress-track">
-        <span className="progress-segment success" style={{ width: `${successful}%` }} />
-        <span className="progress-segment rejected" style={{ width: `${rejected}%` }} />
-        <span className="progress-segment processing" style={{ width: `${inProcess}%` }} />
+      <div className={`progress-track ${total ? "" : "idle"}`}>
+        {total ? (
+          <>
+            <span className="progress-segment success" style={{ width: `${successful}%` }} />
+            <span className="progress-segment rejected" style={{ width: `${rejected}%` }} />
+            <span className="progress-segment processing" style={{ width: `${inProcess}%` }} />
+          </>
+        ) : null}
       </div>
       <div className="progress-legend">
         <span>Exitosas {percentText(successful)}</span>
@@ -1369,6 +1389,74 @@ function completionPercent(total?: number, successful?: number, rejected?: numbe
     return 0;
   }
   return percent((successful || 0) + (rejected || 0), total);
+}
+
+function useSmoothNumber(target: number) {
+  const [value, setValue] = useState(target);
+  const frameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (frameRef.current) {
+      cancelAnimationFrame(frameRef.current);
+    }
+
+    const step = () => {
+      setValue((current) => {
+        const diff = target - current;
+        if (Math.abs(diff) < 0.15) {
+          frameRef.current = null;
+          return target;
+        }
+        frameRef.current = requestAnimationFrame(step);
+        return current + diff * 0.22;
+      });
+    };
+
+    frameRef.current = requestAnimationFrame(step);
+    return () => {
+      if (frameRef.current) {
+        cancelAnimationFrame(frameRef.current);
+      }
+    };
+  }, [target]);
+
+  return value;
+}
+
+function batchStatusMessage(input: {
+  hasTrackingData: boolean;
+  loading: boolean;
+  autoRefresh: boolean;
+  status: BatchStatusName;
+  declaredRecords?: number;
+  successfulRecords?: number;
+  rejectedRecords?: number;
+  inProcessRecords?: number;
+}) {
+  if (!input.hasTrackingData) {
+    return "Carga un archivo o consulta un Batch ID para iniciar el seguimiento.";
+  }
+  if (input.loading) {
+    return "Consultando el ultimo estado del lote...";
+  }
+  if (input.status === "RECEIVED") {
+    return "Lote recibido. Preparando procesamiento de lineas.";
+  }
+  if (input.status === "PROCESSING" || input.status === "COMPLETING" || input.status === "UNKNOWN") {
+    const total = input.declaredRecords || 0;
+    const processed = (input.successfulRecords || 0) + (input.rejectedRecords || 0);
+    if (total > 0) {
+      return `Procesando ${numberText(processed)} de ${numberText(total)} lineas${input.autoRefresh ? " con actualizacion automatica" : ""}.`;
+    }
+    return "Inicializando contadores del lote.";
+  }
+  if (input.status === "COMPLETED" || input.status === "COMPLETED_WITH_ISSUES") {
+    return "Procesamiento finalizado. Reporte y comprobante disponibles segun el estado del lote.";
+  }
+  if (input.status === "REJECTED") {
+    return "Lote rechazado. Revisa el motivo antes de volver a cargarlo.";
+  }
+  return "El lote no pudo finalizar correctamente. Revisa la respuesta del servicio.";
 }
 
 function percentText(value: number) {
