@@ -894,7 +894,7 @@ function StatusPanel(props: Readonly<{
       <div className="progress-head">
         <div>
           <span>Avance del lote</span>
-          <strong>{Math.round(progress)}%</strong>
+          <strong>{percentText(progress)}</strong>
         </div>
         <label className="switch">
           <input type="checkbox" checked={props.autoRefresh} onChange={(event) => props.setAutoRefresh(event.target.checked)} />
@@ -942,9 +942,9 @@ function ProgressBar(props: Readonly<{ total?: number; successful?: number; reje
         <span className="progress-segment processing" style={{ width: `${inProcess}%` }} />
       </div>
       <div className="progress-legend">
-        <span>Exitosas {Math.round(successful)}%</span>
-        <span>Rechazadas {Math.round(rejected)}%</span>
-        <span>En proceso {Math.round(inProcess)}%</span>
+        <span>Exitosas {percentText(successful)}</span>
+        <span>Rechazadas {percentText(rejected)}</span>
+        <span>En proceso {percentText(inProcess)}</span>
       </div>
     </div>
   );
@@ -1369,6 +1369,13 @@ function completionPercent(total?: number, successful?: number, rejected?: numbe
     return 0;
   }
   return percent((successful || 0) + (rejected || 0), total);
+}
+
+function percentText(value: number) {
+  if (value > 0 && value < 10) {
+    return `${value.toFixed(1)}%`;
+  }
+  return `${Math.round(value)}%`;
 }
 
 function formatDateTime(value?: string) {
