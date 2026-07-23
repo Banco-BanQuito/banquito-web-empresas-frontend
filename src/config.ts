@@ -10,7 +10,7 @@ export const config = {
   batchReportPath: import.meta.env.VITE_BATCH_REPORT_PATH || "/api/v2/reports/payments/batches/:batchId/report",
   receiptPath: import.meta.env.VITE_RECEIPT_PATH || "/api/v2/payments/receipts/:batchId",
   maxUploadMb: Number(import.meta.env.VITE_MAX_UPLOAD_MB || 10),
-  pollIntervalMs: Number(import.meta.env.VITE_POLL_INTERVAL_MS || 2000),
+  pollIntervalMs: Number(import.meta.env.VITE_POLL_INTERVAL_MS || 1000),
   serviceTypes: splitCsv(import.meta.env.VITE_SERVICE_TYPES || "NOMINA,PROVEEDORES,INTERBANCARIO")
 };
 

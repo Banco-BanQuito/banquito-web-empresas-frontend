@@ -859,8 +859,6 @@ function StatusPanel(props: Readonly<{
     props.status?.inProcessRecords ??
     props.selectedHistory?.inProcessRecords ??
     inferInProcess(declaredRecords, successfulRecords, rejectedRecords);
-  const processedRecords = (successfulRecords || 0) + (rejectedRecords || 0);
-  const sentRecords = declaredRecords || 0;
   const progress = completionPercent(declaredRecords, successfulRecords, rejectedRecords);
 
   return (
@@ -908,8 +906,6 @@ function StatusPanel(props: Readonly<{
       <ProgressBar total={declaredRecords} successful={successfulRecords} rejected={rejectedRecords} inProcess={inProcessRecords} />
 
       <div className="metrics-grid">
-        <Metric label="Enviado a Pub/Sub" value={`${numberText(sentRecords)} / ${numberText(declaredRecords)}`} />
-        <Metric label="Procesado por Core" value={`${numberText(processedRecords)} / ${numberText(declaredRecords)}`} />
         <Metric label="Declaradas" value={numberText(declaredRecords)} />
         <Metric label="Exitosas" value={numberText(successfulRecords)} tone="good" />
         <Metric label="Rechazadas" value={numberText(rejectedRecords)} tone="bad" />
