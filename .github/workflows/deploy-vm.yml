@@ -71,16 +71,17 @@ jobs:
       - name: Deploy static files to VM
         run: |
           set -euo pipefail
-          VM_PORT_VALUE="${{ secrets.VM_PORT }}"
+          VM_HOST="$(gcloud secrets versions access latest --secret=frontend-vm-host --project "$PROJECT_ID" | tr -d '\r\n')"
+          VM_USER="$(gcloud secrets versions access latest --secret=frontend-vm-user --project "$PROJECT_ID" | tr -d '\r\n')"
+          VM_PORT_VALUE="$(gcloud secrets versions access latest --secret=frontend-vm-port --project "$PROJECT_ID" | tr -d '\r\n')"
           VM_PORT_VALUE="${VM_PORT_VALUE:-22}"
-          test -n "${{ secrets.VM_HOST }}"
-          test -n "${{ secrets.VM_USER }}"
-          test -n "${{ secrets.VM_SSH_KEY }}"
+          test -n "$VM_HOST"
+          test -n "$VM_USER"
           mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/banquito_vm_key
+          gcloud secrets versions access latest --secret=frontend-vm-ssh-private-key --project "$PROJECT_ID" > ~/.ssh/banquito_vm_key
           chmod 600 ~/.ssh/banquito_vm_key
-          ssh-keyscan -p "$VM_PORT_VALUE" "${{ secrets.VM_HOST }}" >> ~/.ssh/known_hosts
+          ssh-keyscan -p "$VM_PORT_VALUE" "$VM_HOST" >> ~/.ssh/known_hosts
           REMOTE_TGZ="/tmp/${APP_NAME}-${{ github.sha }}.tgz"
-          scp -i ~/.ssh/banquito_vm_key -P "$VM_PORT_VALUE" frontend-dist.tgz "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:$REMOTE_TGZ"
-          ssh -i ~/.ssh/banquito_vm_key -p "$VM_PORT_VALUE" "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}" \
+          scp -i ~/.ssh/banquito_vm_key -P "$VM_PORT_VALUE" frontend-dist.tgz "$VM_USER@$VM_HOST:$REMOTE_TGZ"
+          ssh -i ~/.ssh/banquito_vm_key -p "$VM_PORT_VALUE" "$VM_USER@$VM_HOST" \
             "sudo mkdir -p '$DEPLOY_PATH' && sudo rm -rf '$DEPLOY_PATH'/* && sudo tar -xzf '$REMOTE_TGZ' -C '$DEPLOY_PATH' && sudo rm -f '$REMOTE_TGZ'"
