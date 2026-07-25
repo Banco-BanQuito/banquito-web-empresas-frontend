@@ -1,0 +1,86 @@
+name: Build and Deploy Frontend to VM
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: project-47695a8e-7cb2-4352-af2
+  APP_NAME: web-empresas-frontend
+  DEPLOY_PATH: /var/www/banquito/empresas
+
+jobs:
+  build-deploy-vm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/69503932816/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider
+          service_account: github-actions-gke@project-47695a8e-7cb2-4352-af2.iam.gserviceaccount.com
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Read frontend secrets from Secret Manager
+        run: |
+          set -euo pipefail
+          IDENTITY_PLATFORM_API_KEY="$(gcloud secrets versions access latest --secret=identity-platform-api-key --project "$PROJECT_ID")"
+          APIGEE_API_KEY="$(gcloud secrets versions access latest --secret=app-web-empresas --project "$PROJECT_ID")"
+          IDENTITY_PLATFORM_API_KEY="${IDENTITY_PLATFORM_API_KEY//$'\r'/}"
+          IDENTITY_PLATFORM_API_KEY="${IDENTITY_PLATFORM_API_KEY//$'\n'/}"
+          APIGEE_API_KEY="${APIGEE_API_KEY//$'\r'/}"
+          APIGEE_API_KEY="${APIGEE_API_KEY//$'\n'/}"
+          test -n "$IDENTITY_PLATFORM_API_KEY"
+          test -n "$APIGEE_API_KEY"
+          echo "::add-mask::$IDENTITY_PLATFORM_API_KEY"
+          echo "::add-mask::$APIGEE_API_KEY"
+          echo "IDENTITY_PLATFORM_API_KEY=$IDENTITY_PLATFORM_API_KEY" >> "$GITHUB_ENV"
+          echo "APIGEE_API_KEY=$APIGEE_API_KEY" >> "$GITHUB_ENV"
+
+      - name: Build static frontend
+        run: |
+          set -euo pipefail
+          npm ci
+          printf "export const buildEnv = {\n  identityPlatformApiKey: '%s',\n  apigeeApiKey: '%s'\n};\n" \
+            "$IDENTITY_PLATFORM_API_KEY" "$APIGEE_API_KEY" > src/build-env.ts
+          printf "VITE_PARTY_API_BASE_URL=%s\nVITE_API_BASE_URL=%s\nVITE_IDENTITY_PLATFORM_API_KEY=%s\nVITE_APIGEE_API_KEY=%s\n" \
+            "${{ vars.VITE_PARTY_API_BASE_URL || 'https://136.68.89.25.nip.io' }}" \
+            "${{ vars.VITE_API_BASE_URL || 'https://136.68.89.25.nip.io' }}" \
+            "$IDENTITY_PLATFORM_API_KEY" \
+            "$APIGEE_API_KEY" > .env.production.local
+          npm run build
+          grep -R "$IDENTITY_PLATFORM_API_KEY" dist/assets >/dev/null
+          grep -R "$APIGEE_API_KEY" dist/assets >/dev/null
+          tar -czf frontend-dist.tgz -C dist .
+
+      - name: Deploy static files to VM
+        run: |
+          set -euo pipefail
+          VM_PORT_VALUE="${{ secrets.VM_PORT }}"
+          VM_PORT_VALUE="${VM_PORT_VALUE:-22}"
+          test -n "${{ secrets.VM_HOST }}"
+          test -n "${{ secrets.VM_USER }}"
+          test -n "${{ secrets.VM_SSH_KEY }}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/banquito_vm_key
+          chmod 600 ~/.ssh/banquito_vm_key
+          ssh-keyscan -p "$VM_PORT_VALUE" "${{ secrets.VM_HOST }}" >> ~/.ssh/known_hosts
+          REMOTE_TGZ="/tmp/${APP_NAME}-${{ github.sha }}.tgz"
+          scp -i ~/.ssh/banquito_vm_key -P "$VM_PORT_VALUE" frontend-dist.tgz "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:$REMOTE_TGZ"
+          ssh -i ~/.ssh/banquito_vm_key -p "$VM_PORT_VALUE" "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}" \
+            "sudo mkdir -p '$DEPLOY_PATH' && sudo rm -rf '$DEPLOY_PATH'/* && sudo tar -xzf '$REMOTE_TGZ' -C '$DEPLOY_PATH' && sudo rm -f '$REMOTE_TGZ'"
